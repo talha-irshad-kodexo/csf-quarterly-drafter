@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ message }}{% endblock %}
+
+{# Transliterated from index.html's viewFailed(). #}
+{% block content %}
+<h1 class="page-title" style="margin-bottom:var(--s4)">{% if run_meta.quarter %}Run {{ run_meta.quarter }} · {{ run_meta.objective_id }}{% else %}{{ message }}{% endif %}</h1>
+<div class="card card-pad">
+  <p style="font-size:16px;line-height:25px;margin-bottom:var(--s3)"><b>The run stopped at <i>{{ failed_stage_label or message }}</i>.</b></p>
+  <p class="rationale" style="margin-bottom:var(--s3)">{{ detail or message }}</p>
+  <p class="small muted" style="margin-bottom:var(--s4)"><b>No partial draft has been created.</b> The failure mode this product must never have is a confident draft built from six of seven files.</p>
+  {# An empty data folder reaches this page: the workspace cannot be shown at
+     all without an objective record, and until now the only way out was a
+     text editor. The button that fixes it belongs on the page that reports
+     the problem, not on the page you cannot reach. #}
+  <div style="display:flex;gap:var(--s3);flex-wrap:wrap">
+    {% if thread_id %}
+      <form method="post" action="/runs" data-busy="Retrying…"><button type="submit" class="btn btn-primary">Retry</button></form>
+    {% else %}
+      <form method="post" action="/evidence/demo" data-busy="Loading…"><button type="submit" class="btn btn-primary">Load the demo pack</button></form>
+    {% endif %}
+    <a class="btn" href="/">Back to runs</a>
+    <a class="btn btn-ghost" href="/runs/new">New run</a>
+  </div>
+</div>
+{% if stages %}
+<details style="margin-top:var(--s4)"><summary class="small muted" style="cursor:pointer">Stage log</summary>
+  <div class="card card-pad" style="margin-top:var(--s3)"><div class="stage-list">
+    {% for stage in stages %}
+      <div class="stage-row {{ stage.state }}">
+        <span class="stage-ico">{% if stage.state == 'done' %}✓{% elif stage.state == 'fail' %}✕{% else %}○{% endif %}</span>
+        <span class="stage-name">{{ stage.label }}</span>
+        <span class="stage-detail">{{ stage.detail }}</span>
+      </div>
+    {% endfor %}
+  </div></div></details>
+{% endif %}
+{% endblock %}

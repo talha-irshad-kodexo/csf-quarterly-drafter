@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import tl_badge %}
+{% block title %}{% if approved %}Export — {{ thread_id }}{% else %}Not approved yet{% endif %}{% endblock %}
+
+{# Transliterated from index.html's viewExport(). #}
+{% block content %}
+{% if not approved %}
+  <div class="card empty">
+    <h2>Not approved yet</h2>
+    <p>Export unlocks after <b>Approve and export</b> on the review screen — a 409 in spirit.</p>
+    <a class="btn btn-primary" href="/runs/{{ thread_id }}">Back to the review screen</a>
+  </div>
+{% else %}
+  <div class="stack">
+    <div class="card card-pad">
+      <h1 class="section-h" style="margin-bottom:var(--s2)">Row approved {{ staged_at | fmt_datetime }}</h1>
+      <p class="small muted" style="margin-bottom:var(--s4)">Source recorded as <b>{{ row.get("Source", "Substrate-Drafted") }}</b>.</p>
+      <div style="display:flex;gap:var(--s3);flex-wrap:wrap">
+        <a class="btn btn-primary" href="/runs/{{ thread_id }}/staged.json">Download row (JSON)</a>
+        <a class="btn" href="/runs/{{ thread_id }}/export.csv">Download row (CSV)</a>
+        <a class="btn" href="/runs/{{ thread_id }}/audit.md">Download evidence trail</a>
+      </div>
+      <p class="rationale" style="margin-top:var(--s5)"><b>Next step, and it is yours:</b> open the CSF Form and submit the row above. This tool has not written to any list and cannot.</p>
+    </div>
+    <div class="card card-pad">
+      <div class="field-label" style="margin-bottom:var(--s3)">The staged row</div>
+      <dl class="kv">
+        {% for key, value in row.items() if key not in ("submitted", "staged_at", "thread_id") %}
+          <dt class="mono">{{ key }}</dt>
+          <dd>{% if key == "Traffic_Light" %}{{ tl_badge(value) }}{% elif value is sequence and value is not string %}{{ value | join('; ') }}{% else %}{{ value if value is not none else "—" }}{% endif %}</dd>
+        {% endfor %}
+        <dt class="mono subtle">Trend_vs_Prior_Quarter</dt><dd class="subtle">— absent by design</dd>
+      </dl>
+      <p class="tiny subtle" style="margin-top:var(--s4)">Start a <a href="/runs/new">new run</a> if the evidence has changed.</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

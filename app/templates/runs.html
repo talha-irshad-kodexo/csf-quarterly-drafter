@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import tl_badge, calculating %}
+{% block title %}Runs — CSF Personal Layer{% endblock %}
+
+{# Transliterated from index.html's viewRuns(). #}
+{% block content %}
+{% if not runs %}
+  <div class="card empty">
+    <div class="eyebrow" style="margin-bottom:var(--s3)">Quarterly update drafting assistant</div>
+    <h2>No runs yet</h2>
+    <p>Point the tool at a folder of evidence and it will prepare a draft update for you to check. It proposes; you decide — every claim carries a line-level citation, and nothing is ever submitted from here.</p>
+    <div style="display:flex;gap:var(--s3);justify-content:center;flex-wrap:wrap">
+      <a class="btn btn-primary" href="/runs/new">New run</a>
+      <form method="post" action="/runs" data-busy="Reading the evidence…">
+        <button type="submit" class="btn">Run the evidence in the data folder</button>
+      </form>
+    </div>
+    <p class="tiny subtle" style="margin-top:var(--s4)">The folder holds an objective record, the previously submitted quarter, and a quarter of email, chat, minutes and donor reporting. Nothing about it is compiled into the pipeline: swap in your own folder and the draft changes.</p>
+  </div>
+{% else %}
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s5)">
+    <div><h1 class="page-title">Runs</h1>
+    <p class="small muted">Runs are immutable and append-only. A rerun never mutates a previous draft, so two runs can be compared side by side.</p></div>
+    {# Clearing the workspace one row at a time meant a delete and a dialog per
+       draft. It is the same operation either way — stop the run, drop the
+       checkpoint, remove the folder — so it is offered once for all of them. #}
+    <div style="display:flex;gap:var(--s3);align-items:center;flex:none">
+      <form method="post" action="/runs/delete-all" data-confirm-delete-all>
+        <button type="submit" class="btn btn-danger" aria-label="Delete every run">Delete all runs</button>
+      </form>
+      <a class="btn btn-primary" href="/runs/new">New run</a>
+    </div>
+  </div>
+  <div class="card"><table class="tbl">
+    <thead><tr><th>Quarter</th><th>Objective</th><th>Traffic light (proposed → current)</th><th>Status</th><th>Created</th><th class="num">LLM calls</th><th></th></tr></thead>
+    <tbody>
+      {% for run in runs %}
+        <tr class="rowlink" data-action="open-run" data-href="/runs/{{ run.thread_id }}" tabindex="0" role="link" aria-label="Open run {{ run.quarter or run.thread_id }}">
+          <td class="mono tnum nowrap">{{ run.quarter or run.thread_id }}</td>
+          <td class="mono">{{ run.objective_id or "—" }}</td>
+          <td>
+            {%- if run.traffic_light -%}
+              {{ tl_badge(run.proposed_traffic_light or run.traffic_light) }}
+              {%- if run.proposed_traffic_light and run.proposed_traffic_light != run.traffic_light %} <span class="subtle">→</span> {{ tl_badge(run.traffic_light) }}{% endif -%}
+            {%- elif run.status == "running" -%}{{ calculating() }}
+            {%- else -%}<span class="muted">—</span>{%- endif -%}
+          </td>
+          <td>
+            {%- if run.status == "running" -%}<span class="pill pill-status run">running</span>
+            {%- elif run.status == "failed" -%}<span class="pill pill-status fail">failed</span>
+            {%- elif run.status == "staged" -%}<span class="pill pill-status ok">approved</span>
+            {%- elif run.edits -%}<span class="pill pill-status">under review</span>
+            {%- else -%}<span class="pill pill-status">draft</span>{%- endif -%}
+          </td>
+          <td class="nowrap muted">{{ run.created | fmt_datetime }}</td>
+          <td class="num muted">{{ run.llm_calls }} live / 0 cached</td>
+          {# A real form with a real action, so deleting still works with no
+             JavaScript. app.js intercepts the submit to raise the dialog. #}
+          <td class="num">
+            <form method="post" action="/runs/{{ run.thread_id }}/delete" data-confirm-delete>
+              <button type="submit" class="link-btn tiny" aria-label="Delete run {{ run.thread_id }}">delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody></table></div>
+{% endif %}
+{% endblock %}
+
+{% block dialogs %}
+<div class="overlay" id="delete-dialog" data-action="overlay-close" role="presentation" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h3>Delete this draft?</h3>
+    <p class="rationale">The draft, the evidence index, your edits and the audit trail for this run are permanently removed. The evidence files themselves are untouched.</p>
+    <div class="dialog-actions">
+      <button class="btn" data-action="close-dialog">Cancel</button>
+      <button class="btn btn-danger" data-action="confirm-delete">Delete</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="delete-all-dialog" data-action="overlay-close" role="presentation" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h3>Delete all {{ runs | length }} {{ "run" if runs | length == 1 else "runs" }}?</h3>
+    <p class="rationale">Every draft, every set of edits and every audit trail in this workspace is permanently removed, including any run still in progress. This cannot be undone.</p>
+    <p class="rationale" style="margin-top:var(--s3)">Your evidence files under <code class="inline">data/</code> are untouched — the objective record, the previous quarter and the quarter's documents all stay exactly as they are.</p>
+    <div class="dialog-actions">
+      <button class="btn" data-action="close-dialog">Cancel</button>
+      <button class="btn btn-danger" data-action="confirm-delete">Delete all runs</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

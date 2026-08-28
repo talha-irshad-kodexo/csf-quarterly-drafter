@@ -1,0 +1,147 @@
+{# The app shell — a transliteration of index.html's shell().
+
+   Same tags, same classes, same nesting, same copy. Where a sentence in
+   index.html states a fact about a single-file browser build ("drafts live in
+   this browser session"), it is restated for this build rather than copied,
+   because the words are a promise to the director about where their evidence
+   goes and a false one is worse than a different one. #}
+<!doctype html>
+{# `no-js` is removed by the first line of script that runs. Anything that
+   needs JavaScript to be usable — the tab strip — falls back to showing
+   everything at once rather than to showing one panel and five dead
+   buttons. #}
+<html lang="en" class="no-js{% if theme == 'dark' %} dark{% endif %}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}CSF Personal Layer — Quarterly Update Drafting Assistant{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23275e6e'/%3E%3Ccircle cx='16' cy='13' r='5' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3Cpath d='M9 24h14' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+{# Inlined so a cold start cannot 404 /static/* and leave the page bare.
+   Must be |safe — autoescape would turn CSS child selectors into &gt;. #}
+<style>{{ inline_css | safe }}</style>
+<script>
+  (function () {
+    document.documentElement.classList.remove("no-js");
+    try {
+      var t = localStorage.getItem("csf-theme");
+      var dark = t === "dark" ||
+        (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      if (dark) document.documentElement.classList.add("dark");
+      // Applied before first paint, for the same reason the theme is: the
+      // sidebar is 226px or 64px, and animating from the wrong one on every
+      // page load reads as the layout settling rather than as a choice.
+      if (localStorage.getItem("csf-sidebar") === "rail")
+        document.documentElement.classList.add("rail");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+{% macro side_icon(name) %}
+  {%- set paths = {
+    "runs":     "<path d='M3 5h14M3 10h14M3 15h9'/>",
+    "new":      "<path d='M10 4v12M4 10h12'/>",
+    "audit":    "<path d='M4 3h9l3 3v11H4z'/><path d='M7 9h6M7 12h6'/>",
+    "review":   "<path d='M4 4h12v12H4z'/><path d='M7 8.5l2 2 4-4'/>",
+    "dashboard":"<rect x='3' y='3' width='6' height='6' rx='1'/><rect x='11' y='3' width='6' height='6' rx='1'/><rect x='3' y='11' width='6' height='6' rx='1'/><rect x='11' y='11' width='6' height='6' rx='1'/>",
+    "evidence": "<path d='M5 3h7l3 3v11H5z'/><path d='M12 3v3h3'/>",
+    "export":   "<path d='M10 3v9'/><path d='M6.5 8.5L10 12l3.5-3.5'/><path d='M4 15h12'/>"
+  } -%}
+  <span class="side-ico" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">{{ paths.get(name, "") | safe }}</svg></span>
+{% endmacro %}
+<div id="app">
+  <header class="app-header">
+    <button class="hbtn hbtn-icon" data-action="toggle-sidebar" aria-label="Collapse or expand the sidebar" title="Collapse or expand the sidebar">
+      <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="2"/><path d="M8 3.5v13"/></svg>
+    </button>
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 32 32"><circle cx="16" cy="12" r="6" fill="none" stroke="#fff" stroke-width="3"/><path d="M8 25h16" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></span>
+      <span><span class="brand-name">CSF Personal Layer</span><br><span class="brand-sub">Quarterly update drafting</span></span>
+    </a>
+    <div class="header-spacer"></div>
+    <button class="hbtn" data-action="open-settings"><span class="key-dot{% if has_key %} ok{% endif %}" aria-hidden="true"></span>{% if has_key %}API key set{% else %}Add API key{% endif %}</button>
+    <button class="hbtn" data-action="toggle-theme" aria-label="Toggle theme">☾ Dark</button>
+  </header>
+  <div class="app-body">
+    <nav class="sidebar" aria-label="Sections">
+      <div class="side-group">
+        <div class="side-label">Workspace</div>
+        {# Dashboard leads: the workspace-wide answer to "where does everything
+           stand" is the first thing a director wants, and Runs is the drill-down
+           from it rather than the other way round. #}
+        <a class="side-link{% if nav == 'product' %} active{% endif %}" href="/dashboard" title="Dashboard">{{ side_icon("dashboard") }}<span class="side-text">Dashboard</span></a>
+        <a class="side-link{% if nav == 'runs' %} active{% endif %}" href="/" title="Runs">{{ side_icon("runs") }}<span class="side-text">Runs</span><span class="mono side-text">{{ run_count or '' }}</span></a>
+        <a class="side-link{% if nav == 'new' %} active{% endif %}" href="/runs/new" title="New run">{{ side_icon("new") }}<span class="side-text">New run</span></a>
+        {# Not behind a run. The first question anyone asks of a tool that
+           writes on their behalf is what it did, and that should not require
+           having drafted something first. #}
+        <a class="side-link{% if nav == 'workspace-audit' %} active{% endif %}" href="/audit" title="Audit trail">{{ side_icon("audit") }}<span class="side-text">Audit trail</span></a>
+      </div>
+      {% if thread_id %}
+      <div class="side-group">
+        <div class="side-label">This run</div>
+        <a class="side-link{% if nav == 'review' %} active{% endif %}" href="/runs/{{ thread_id }}" title="Review draft">{{ side_icon("review") }}<span class="side-text">Review draft</span></a>
+        <a class="side-link{% if nav == 'dashboard' %} active{% endif %}" href="/runs/{{ thread_id }}/dashboard" title="Snapshot">{{ side_icon("dashboard") }}<span class="side-text">Snapshot</span></a>
+        <a class="side-link{% if nav == 'evidence' %} active{% endif %}" href="/runs/{{ thread_id }}/evidence/{{ first_doc_id or 'E1' }}" title="Evidence">{{ side_icon("evidence") }}<span class="side-text">Evidence</span><span class="mono side-text">{{ run_meta.evidence_count or '' }}</span></a>
+        <a class="side-link{% if nav == 'audit' %} active{% endif %}" href="/runs/{{ thread_id }}/audit" title="This run's audit trail">{{ side_icon("audit") }}<span class="side-text">Run audit</span></a>
+        {% if staged_path %}<a class="side-link{% if nav == 'export' %} active{% endif %}" href="/runs/{{ thread_id }}/export" title="Export">{{ side_icon("export") }}<span class="side-text">Export</span></a>{% endif %}
+      </div>
+      {% endif %}
+    </nav>
+    <div class="workspace">
+      <main class="main"><div class="content">{% block content %}{% endblock %}</div></main>
+      {# Review actions live here, outside the scrolling draft, so they never
+         land in the middle of the fields. Other pages leave this empty. #}
+      {% block page_dock %}{% endblock %}
+    </div>
+  </div>
+  {# The principle this build is organised around, kept where it reads as a
+     statement about the application rather than as one more nav item. #}
+  <footer class="app-footer">
+    <div class="app-footer-inner">
+      <span class="footer-label">Principle</span>
+      <span>AI never writes to the system of record. The terminal action here is <b>Approve and export</b> — there is no submit path in this project.</span>
+    </div>
+  </footer>
+</div>
+<div id="dialog-root">
+  {# Settings — index.html's openSettings(), minus the session export/import,
+     which has no meaning when the runs already live on this server. #}
+  <div class="overlay" id="settings-dialog" data-action="overlay-close" role="presentation" hidden>
+    <div class="dialog" role="dialog" aria-modal="true">
+      <h3>Settings</h3>
+      <form method="post" action="/settings/key" autocomplete="off">
+        <div class="stack" style="--s5:16px">
+          <div class="f-row"><label class="field-label" for="set-key">Anthropic API key</label>
+            <input class="input mono" id="set-key" name="api_key" type="password" placeholder="{% if has_key %}{{ masked_key }}{% else %}sk-ant-…{% endif %}" autocomplete="off">
+          </div>
+          <div class="f-row"><label class="field-label" for="set-model">Reasoning model</label>
+            <select class="selectbox mono" id="set-model" name="model">
+              {% for value, label in model_options %}<option value="{{ value }}"{% if value == model %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <span class="helper">One model for every reasoning pass, read from config, never hardcoded in a stage. A list rather than a text box: a mistyped model id is not a validation error, it is a run that fails four passes in.</span></div>
+          <div class="f-row"><label class="field-label" for="set-reader">Reading model</label>
+            <select class="selectbox mono" id="set-reader" name="reader_model">
+              {% for value, label in reader_model_options %}<option value="{{ value }}"{% if value == reader_model %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <span class="helper">The reading pass is mechanical work — restate what a document says, cite it — and the citations come from the API, so it runs on the smaller model.</span></div>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-action="close-dialog">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% block dialogs %}{% endblock %}
+</div>
+<div id="toasts" aria-live="polite">
+  {% if message %}<div class="toast">{{ message }}</div>{% endif %}
+  {% if error %}<div class="toast err">{{ error }}</div>{% endif %}
+</div>
+<script>{{ inline_js | safe }}</script>
+</body>
+</html>

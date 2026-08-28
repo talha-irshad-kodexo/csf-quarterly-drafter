@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "partials/dashboard.html" import snapshot %}
+{% block title %}Snapshot — {{ run_meta.quarter }} · {{ run_meta.objective_id }}{% endblock %}
+
+{% block content %}
+<div class="stack">
+  <div>
+    <h1 class="page-title" style="margin-bottom:var(--s2)">Draft snapshot</h1>
+    <p class="serif" style="font-size:16.5px;line-height:26px;max-width:68ch">{{ objective.get("Title") or "This draft is still being derived." }}</p>
+    <p class="small muted tnum" style="margin-top:var(--s2)">{{ dash.quarter or thread_id }} · {{ dash.objective_id or "—" }} · <span class="dash-inline" tabindex="0" data-tip="{{ dash.source_tip }}">Source recorded as <b>{{ dash.source }}</b></span> · this tool does not submit.</p>
+    {% if dash.pending and not dash.current_tl %}
+      <p class="small muted" style="margin-top:var(--s3);max-width:68ch">The pipeline is still reading. Traffic light and progress fill in here when the draft is ready — nothing is submitted in the meantime.</p>
+    {% endif %}
+  </div>
+  {{ snapshot(dash, thread_id, "full") }}
+</div>
+{% endblock %}

@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import tl_badge, st_badge, sev_pill, chip, chips, attn_group, ack_row, cited_prose, cite_row, why_full %}
+{% from "partials/dashboard.html" import snapshot %}
+{% block title %}{{ run_meta.quarter }} · {{ run_meta.objective_id }} — CSF Personal Layer{% endblock %}
+
+{# Transliterated from index.html's viewReview(). Section order, tags, classes
+   and copy follow it. Sections whose data this pipeline does not produce —
+   the success-measure component table, prior-quarter restatements — render
+   nothing rather than being replaced with a substitute. #}
+{% block content %}
+{% set back = "/runs/" ~ thread_id %}
+<div class="stack-lg">
+
+  <div>
+    <div style="display:flex;align-items:baseline;gap:var(--s3);flex-wrap:wrap">
+      <h1 class="page-title mono" style="font-family:var(--font-ui)">{{ row.Quarter }} · {{ row.Objective_ID }}</h1>
+      <span class="pill pill-status">{{ row.Source }}</span>
+      {% if acknowledged_count and not all_acknowledged %}<span class="pill pill-status">under review · {{ acknowledged_count }} {{ "field" if acknowledged_count == 1 else "fields" }}</span>{% endif %}
+    </div>
+    <p class="serif" style="font-size:16.5px;line-height:26px;max-width:68ch;margin-top:var(--s2)">{{ objective.get("Title", "") }}</p>
+    <p class="small muted tnum" style="margin-top:var(--s2)">Target completion {{ objective.get("Target_Completion") | fmt_date }}{% if days_remaining is not none %} · {{ days_remaining }} days remaining{% endif %} · as of {{ as_of | fmt_date }} · success measure: <span class="serif" style="font-style:italic">“{{ objective.get("Success_Measure", "not stated") }}”</span></p>
+  </div>
+
+  <div class="banner banner-privacy">
+    <b>This is a private draft. Nothing has been submitted.</b><br>
+    This draft was prepared from the evidence in this folder. It is visible only to you and it goes nowhere until you submit it yourself in the CSF Form. You can delete it at any time.
+    <span class="tiny" style="display:block;margin-top:6px;color:var(--color-text-muted)">Server build: the evidence and this draft stay on this machine, except the text sent to the model API you configured for drafting.</span>
+    <div style="margin-top:var(--s2)"><button class="link-btn small" data-action="open-delete" data-thread="{{ thread_id }}">Delete this draft</button></div>
+  </div>
+
+  {% if dash %}{{ snapshot(dash, thread_id, "compact") }}{% endif %}
+
+  <div>
+    <h2 class="section-h" id="attn" style="margin-bottom:var(--s3)">Needs your attention</h2>
+    {% if not conflicts and not gaps and not errors and not advice %}
+      <p class="small muted">Nothing flagged. That is itself information: no contradictions, no unresolved silences, no validation failures.</p>
+    {% endif %}
+
+    {% call attn_group('div', 'Contradicted since it was written', conflicts | length, conflicts | selectattr('acknowledged', 'false') | list | length > 0) %}
+      {% for c in conflicts %}
+        <div class="attn-item{% if c.acknowledged %} acked{% endif %}" id="finding-{{ c.id }}">
+          <div style="display:flex;gap:var(--s3);align-items:center;margin-bottom:var(--s2)">{{ sev_pill(c.severity) }}<span class="attn-title" style="margin:0">{{ c.topic }}</span><span class="tiny subtle" style="margin-left:auto;text-align:right;max-width:34ch">{{ c.severity_reason }}</span></div>
+          <div class="vs-grid">
+            {# One quote, then its own chip, then the next. A conflict can
+               supersede several claims at once, and a stack of quotes over a
+               run of chips leaves the reader guessing which came from where —
+               which is the one thing this panel exists to make obvious. #}
+            <div class="vs-cell super"><div class="vs-tag">Superseded{% if c.superseded_claim_ids | length > 1 %} <span class="subtle">· {{ c.superseded_claim_ids | length }} claims</span>{% endif %}</div>
+              {% for s in c.superseded_claim_ids %}
+                <div class="vs-claim">
+                  {% if claims.get(s) %}<div class="vs-text">“{{ claims[s].text }}”</div>{% endif %}
+                  <div class="chips">{{ chip(s, claims, thread_id, back) }}</div>
+                </div>
+              {% endfor %}</div>
+            <div class="vs-cell"><div class="vs-tag">Superseding</div>
+              <div class="vs-claim">
+                {% if claims.get(c.winning_claim_id) %}<div class="vs-text">“{{ claims[c.winning_claim_id].text }}”</div>{% endif %}
+                <div class="chips">{{ chip(c.winning_claim_id, claims, thread_id, back) }}</div>
+              </div></div>
+          </div>
+          <p class="resolved-by">Resolved by: {{ c.resolved_by }}.</p>
+          {{ cited_prose(c.note, claims, thread_id, back, "small") }}
+          {{ ack_row('conflict', c.id, c.topic, c.acknowledged, thread_id) }}
+        </div>
+      {% endfor %}
+    {% endcall %}
+
+    {% call attn_group('gap', 'Raised and never settled', gaps | length, gaps | selectattr('acknowledged', 'false') | list | length > 0) %}
+      {% for g in gaps %}
+        <div class="attn-item{% if g.acknowledged %} acked{% endif %}" id="finding-{{ g.id }}">
+          <div style="display:flex;gap:var(--s3);align-items:center;margin-bottom:var(--s2)">{{ sev_pill(g.severity) }}<span class="attn-title" style="margin:0">{{ g.topic }}</span><span class="tiny subtle" style="margin-left:auto;text-align:right;max-width:34ch">{{ g.severity_reason }}</span></div>
+          <p class="rationale">{{ g.note }}</p>
+          {% if g.bears_on %}<p class="rationale" style="margin-top:var(--s2)">Leaves unverified: <b>{{ g.bears_on }}</b>. This is recorded as <b>unknown</b>, not as complete.</p>{% endif %}
+          <div style="margin-top:var(--s2)">{{ cite_row(g.raised_by_claim_ids, g.note, claims, thread_id, back) }}</div>
+          <p class="tiny subtle" style="margin-top:var(--s2)">Nothing later in the pack confirms or denies this. The empty claim set is what makes it a gap.</p>
+          {{ ack_row('gap', g.id, g.topic, g.acknowledged, thread_id) }}
+        </div>
+      {% endfor %}
+    {% endcall %}
+
+    {% call attn_group('err', 'The draft could not be made valid', errors | length, true) %}
+      {% for issue in errors %}
+        <div class="attn-item">
+          <div style="display:flex;gap:var(--s3);align-items:center;margin-bottom:var(--s2)">{{ sev_pill('high') }}<span class="attn-title" style="margin:0">{{ issue.field.replace("_", " ") }}</span></div>
+          <p class="rationale">{{ issue.message }}</p>
+        </div>
+      {% endfor %}
+    {% endcall %}
+
+    {% call attn_group('schema', 'The schema cannot express this', advice | length, false) %}
+      {% for issue in advice %}
+        <div class="attn-item">
+          <div style="display:flex;gap:var(--s3);align-items:center;margin-bottom:var(--s2)">{{ sev_pill('medium') }}<span class="attn-title" style="margin:0">{{ issue.field.replace("_", " ") }}</span></div>
+          <p class="rationale">{{ issue.message }}</p>
+          <p class="resolved-by" style="margin-bottom:0">No action here — this is a framework design point, recorded so it can be raised.</p>
+        </div>
+      {% endfor %}
+    {% endcall %}
+  </div>
+
+  {% set tl = row.Traffic_Light %}
+  {% set tl_overridden = 'Traffic_Light' in proposed and proposed['Traffic_Light'] != tl.value %}
+  <div class="card dfield" id="field-Traffic_Light" data-field-ack="{{ '1' if tl.edited_by_director else '0' }}">
+    <div class="dfield-head"><span class="field-label">Traffic light</span>
+      <div style="display:flex;gap:var(--s2);align-items:center">
+        {% if not staged_path %}<button class="btn btn-sm" data-action="open-override" data-field="Traffic_Light">Override ▾</button>{% endif %}
+        <form method="post" action="/runs/{{ thread_id }}/field/Traffic_Light">
+          <input type="hidden" name="Traffic_Light" value="{{ tl.value or '' }}">
+          <button type="submit" class="btn btn-sm">{% if tl.edited_by_director %}✓ Acknowledged{% else %}Acknowledge{% endif %}</button>
+        </form>
+      </div></div>
+    <div class="dvalue-row">
+      <span class="dvalue-box{% if tl_overridden %} overridden{% endif %}">{{ tl_badge(tl.value, true) }}</span>
+      <span class="pill {% if tl_overridden %}pill-overridden{% else %}pill-derived{% endif %}">{{ "you changed this" if tl_overridden else "derived by the tool" }}</span>
+    </div>
+    {% if tl_overridden %}<p class="proposed-note">tool proposed: {{ tl_badge(proposed['Traffic_Light']) }} — “{{ traffic_lights.get(proposed['Traffic_Light'], '') }}”{% if override_reason.get('Traffic_Light') %} · your reason: <i>{{ override_reason['Traffic_Light'] }}</i>{% endif %}</p>{% endif %}
+    {% if tl.value %}<p class="anchor-quote" style="margin:var(--s3) 0">“{{ traffic_lights.get(tl.value, '') }}”</p>{% endif %}
+    <p class="rationale"><span class="rule-tag">{{ tl.confidence }} confidence</span>&nbsp; {{ tl.rationale }}</p>
+    <div style="margin-top:var(--s3)">{{ cite_row(tl.claim_ids, tl.rationale, claims, thread_id, back ~ '#field-Traffic_Light') }}</div>
+    {{ why_full(tl.reasoning, claims, thread_id, back ~ '#field-Traffic_Light') }}
+    <div id="tl-override-slot">
+      <form class="override-panel" method="post" action="/runs/{{ thread_id }}/field/Traffic_Light" data-override-for="Traffic_Light" hidden>
+        <div style="font-weight:600;margin-bottom:var(--s1)">Change the traffic light</div>
+        <div class="tl-pick" role="radiogroup" aria-label="Traffic light values">
+          {% for value, anchor in traffic_lights.items() %}
+            <label class="tl-opt tl-{{ value }}{% if tl.value == value %} sel{% endif %}" title="{{ anchor }}">
+              <input type="radio" name="Traffic_Light" value="{{ value }}" style="position:absolute;opacity:0;width:0;height:0"{% if tl.value == value %} checked{% endif %}>
+              <span aria-hidden="true">{{ {"Red":"●","Amber":"◐","Green":"○","Blue":"◆"}[value] }}</span>{{ value }}
+            </label>
+          {% endfor %}
+        </div>
+        <label class="field-label" for="tl-reason" style="display:block;margin-bottom:4px">Why are you changing it?</label>
+        <p class="helper" style="margin-bottom:var(--s2)">required — recorded with the draft so the reasoning travels with the row</p>
+        <textarea class="textarea" id="tl-reason" name="reason" rows="2" data-override-reason>{{ override_reason.get('Traffic_Light', '') }}</textarea>
+        <div class="dialog-actions" style="margin-top:var(--s3)">
+          <button type="button" class="btn" data-action="cancel-override" data-field="Traffic_Light">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-override-confirm disabled>Change</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% set pg = row.Progress_Percent %}
+  {% set pg_overridden = 'Progress_Percent' in proposed and proposed['Progress_Percent'] != pg.value %}
+  <div class="card dfield" id="field-Progress_Percent" data-field-ack="{{ '1' if pg.edited_by_director else '0' }}">
+    <div class="dfield-head"><span class="field-label">Progress percent</span>
+      <div style="display:flex;gap:var(--s2);align-items:center">
+        {% if not staged_path %}<button class="btn btn-sm" data-action="open-override" data-field="Progress_Percent">Override ▾</button>{% endif %}
+        <form method="post" action="/runs/{{ thread_id }}/field/Progress_Percent">
+          <input type="hidden" name="Progress_Percent" value="{{ pg.value if pg.value is not none else '' }}">
+          <button type="submit" class="btn btn-sm">{% if pg.edited_by_director %}✓ Acknowledged{% else %}Acknowledge{% endif %}</button>
+        </form>
+      </div></div>
+    <div class="dvalue-row">
+      <span class="dvalue-box{% if pg_overridden %} overridden{% endif %}"><span class="derived-value tnum">{% if pg.value is not none %}{{ pg.value }}%{% else %}—{% endif %}</span></span>
+      <span class="pill {% if pg_overridden %}pill-overridden{% else %}pill-derived{% endif %}">{{ "you changed this" if pg_overridden else "derived by the tool" }}</span>
+    </div>
+    {% if pg_overridden %}<p class="proposed-note">tool proposed: <b class="tnum">{{ proposed['Progress_Percent'] }}%</b>{% if override_reason.get('Progress_Percent') %} · your reason: <i>{{ override_reason['Progress_Percent'] }}</i>{% endif %}</p>{% endif %}
+    <div id="pg-override-slot">
+      <form class="override-panel" method="post" action="/runs/{{ thread_id }}/field/Progress_Percent" data-override-for="Progress_Percent" hidden>
+        <div style="font-weight:600;margin-bottom:var(--s2)">Change the progress figure</div>
+        <div style="display:flex;gap:var(--s3);align-items:center;margin-bottom:var(--s3)">
+          <input class="input tnum" type="number" name="Progress_Percent" min="0" max="100" step="1" style="width:110px" value="{{ pg.value if pg.value is not none else '' }}" aria-label="Progress percent, 0 to 100">
+          <span class="small muted">integer, 0–100 · the tool proposed <b class="tnum">{{ proposed.get('Progress_Percent', pg.value) }}%</b></span></div>
+        <label class="field-label" for="pg-reason" style="display:block;margin-bottom:4px">Why are you changing it?</label>
+        <p class="helper" style="margin-bottom:var(--s2)">required — recorded with the draft so the reasoning travels with the row</p>
+        <textarea class="textarea" id="pg-reason" name="reason" rows="2" data-override-reason>{{ override_reason.get('Progress_Percent', '') }}</textarea>
+        <div class="dialog-actions" style="margin-top:var(--s3)">
+          <button type="button" class="btn" data-action="cancel-override" data-field="Progress_Percent">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-override-confirm disabled>Change progress</button>
+        </div>
+      </form>
+    </div>
+    {% if assessments %}
+      <div style="overflow:auto;margin-top:var(--s4)"><table class="tbl">
+        <thead><tr><th>Component</th><th>Status</th><th class="num">Achieved / target</th><th class="num">Ratio</th><th>Feasible by target</th><th>Citations</th></tr></thead>
+        <tbody>
+          {% for a in assessments %}
+            <tr class="{% if a.is_gap %}row-unknown{% endif %}">
+              <td><span class="mono tiny subtle">{{ a.ref }}</span> {{ a.label }}</td>
+              <td>{{ st_badge(a.status) }}</td>
+              <td class="num">{{ a.achieved_str or "—" }} / {{ a.target_str }}</td>
+              <td class="num">{{ a.ratio_str or "—" }}</td>
+              <td>{{ "yes" if a.feasible_by_target else "—" }}</td>
+              <td>{{ chips(a.claim_ids, claims, thread_id, back) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody></table></div>
+    {% endif %}
+    <p class="rationale" style="margin-top:var(--s4)"><span class="rule-tag">{{ pg.confidence }} confidence</span>&nbsp; {{ pg.rationale }}</p>
+    <div style="margin-top:var(--s3)">{{ cite_row(pg.claim_ids, pg.rationale, claims, thread_id, back ~ '#field-Progress_Percent') }}</div>
+    {{ why_full(pg.reasoning, claims, thread_id, back ~ '#field-Progress_Percent') }}
+    {% if prior_update and prior_update.get("Progress_Percent") %}
+      <p class="rationale" style="margin-top:var(--s3)">⚠ Your {{ prior_update.get("Quarter", "previous") }} submission was <b>{{ prior_update.Progress_Percent }}%</b>. Neither figure declares a denominator, so the two are not directly comparable. Power BI will nonetheless compute a trend between them.</p>
+    {% endif %}
+  </div>
+
+  {% for name in ("Key_Success", "Key_Challenge", "Support_Needed") %}
+    {% set f = row.proposals()[name] %}
+    {% set n = (f.value or "") | length %}
+    <form class="card dfield" id="field-{{ name }}" data-field-ack="{{ '1' if f.edited_by_director else '0' }}"
+          method="post" action="/runs/{{ thread_id }}/field/{{ name }}">
+      <div class="dfield-head"><label class="field-label" for="ta-{{ name }}">{{ name }}</label>
+        <span class="counter{% if n > max_chars %} danger{% elif n >= max_chars - 20 %} warn{% endif %}" data-counter-for="{{ name }}" aria-live="polite">{{ n }} / {{ max_chars }}</span></div>
+      <textarea class="textarea narrative-ta" id="ta-{{ name }}" name="{{ name }}" rows="3"
+                data-narrative="{{ name }}" data-max="{{ max_chars }}"{% if staged_path %} readonly{% endif %}
+                placeholder="{% if f.needs_director_input %}The evidence did not support a value. Left empty deliberately.{% endif %}">{{ f.value or "" }}</textarea>
+      {% if n > max_chars %}<p class="field-error" style="margin-top:var(--s2)">Over the {{ max_chars }}-character limit — the SharePoint column will not hold it. Nothing is truncated for you.</p>{% endif %}
+      <div style="margin-top:var(--s3)">{{ cite_row(f.claim_ids, f.rationale, claims, thread_id, back ~ '#field-' ~ name) }}</div>
+      {{ cited_prose(f.rationale, claims, thread_id, back ~ '#field-' ~ name) }}
+      {% if name in proposed and proposed[name] != f.value %}
+        <div style="margin-top:var(--s3)"><span class="tiny subtle">tool proposed: “{{ proposed[name] | string | truncate(90) }}”</span></div>
+      {% endif %}
+      <div style="margin-top:var(--s3)">
+        <button type="submit" class="btn btn-sm{% if f.edited_by_director %} btn-ack-done{% endif %}">{% if f.edited_by_director %}✓ Acknowledged{% else %}Acknowledge{% endif %}</button>
+        {% if f.needs_director_input %}<span class="pill pill-status" style="margin-left:var(--s3)">needs your input</span>{% endif %}
+      </div>
+    </form>
+  {% endfor %}
+
+  {% set sf = row.Support_From %}
+  {% set sf_changed = 'Support_From' in proposed and proposed['Support_From'] != sf.value %}
+  <form class="card dfield" id="field-Support_From" data-field-ack="{{ '1' if sf.edited_by_director else '0' }}"
+        method="post" action="/runs/{{ thread_id }}/field/Support_From">
+    <div class="dfield-head"><span class="field-label">Support_From</span>
+      <span class="pill {% if sf_changed %}pill-overridden{% else %}pill-derived{% endif %}">{{ "you changed this" if sf_changed else "mapped by the tool" }}</span></div>
+    <div class="tl-pick" role="group" aria-label="Support from — closed vocabulary">
+      {% for option in support_from_options %}
+        <label class="tl-opt{% if sf.value and option in sf.value %} sel{% endif %}">
+          <input type="checkbox" name="Support_From" value="{{ option }}" style="position:absolute;opacity:0;width:0;height:0"{% if sf.value and option in sf.value %} checked{% endif %}{% if staged_path %} disabled{% endif %}>{{ option }}
+        </label>
+      {% endfor %}
+    </div>
+    {% if sf_changed %}<p class="proposed-note">tool proposed: {{ proposed['Support_From'] | join(', ') if proposed['Support_From'] else '—' }}</p>{% endif %}
+    {% if sf.value_reasons %}
+      <div style="margin-top:var(--s3)">
+        <p class="small muted" style="margin-bottom:var(--s1)">Why each was picked:</p>
+        {% for r in sf.value_reasons %}
+          <p class="small" style="padding-left:var(--s3)">
+            · <b>{{ r.value }}</b> — {{ r.reason }}
+            {%- set refs = r.reason | claim_refs -%}
+            {%- if refs %} <span class="chips" style="display:inline-flex">{% for ref in refs %}{{ chip(ref, claims, thread_id, back ~ '#field-Support_From') }}{% endfor %}</span>{% endif -%}
+          </p>
+        {% endfor %}
+        {% if "Other" in (sf.value or []) %}
+          <p class="tiny subtle" style="margin-top:var(--s2)">
+            <b>Other</b> means the function this objective needs has no value in the
+            closed vocabulary. The reason above is what the vocabulary owner needs
+            in order to add one — the routing information the field exists to carry
+            is otherwise lost.
+          </p>
+        {% endif %}
+      </div>
+    {% elif sf.value %}
+      <p class="tiny subtle" style="margin-top:var(--s3)">No reason was recorded for these choices.{% if "Other" in (sf.value or []) %} <b>Other</b> without a reason is indistinguishable from nobody having thought about it.{% endif %}</p>
+    {% endif %}
+    <div style="margin-top:var(--s3)">
+      <button type="submit" class="btn btn-sm{% if sf.edited_by_director %} btn-ack-done{% endif %}">{% if sf.edited_by_director %}✓ Acknowledged{% else %}Acknowledge{% endif %}</button>
+    </div>
+  </form>
+
+  {% if reconciled_position %}
+    <div class="card card-pad evidence-supports">
+      <h2 class="section-h" style="margin-bottom:var(--s2)">What the evidence supports</h2>
+      <p class="tiny muted" style="margin-bottom:var(--s3)">The position after contradictions were resolved. Each mark opens the cited lines.</p>
+      {{ cited_prose(reconciled_position, claims, thread_id, back, "cited-p", true) }}
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block page_dock %}
+{% set ack_total = fields | length %}
+{% set ack_pct = ((acknowledged_count / ack_total * 100) | round) if ack_total else 0 %}
+<aside class="action-dock{% if staged_path %} is-approved{% elif all_acknowledged %} is-ready{% endif %}"
+       id="approve-footer" data-ack-total="{{ ack_total }}" aria-label="Draft actions">
+  {% if staged_path %}
+    <div class="action-dock-inner">
+      <div class="action-dock-status">
+        <span class="ack-ring ready" aria-hidden="true">✓</span>
+        <div class="action-dock-copy">
+          <p class="action-dock-title">Approved {{ staged_at | fmt_datetime }} · Source recorded as {{ row.Source }}</p>
+          <p class="tiny muted"><b>This tool does not submit anything.</b> The row and its evidence trail are ready for you to submit yourself in the CSF Form.</p>
+          {% if not all_acknowledged %}<p class="small muted">Acknowledge every field above before export unlocks ({{ acknowledged_count }}/{{ ack_total }}).</p>{% endif %}
+        </div>
+      </div>
+      <div class="action-dock-actions">
+        <a class="btn btn-primary" href="/runs/{{ thread_id }}/export" data-open-export{% if not all_acknowledged %} aria-disabled="true" tabindex="-1"{% endif %}>Open export</a>
+      </div>
+    </div>
+  {% else %}
+    <div class="action-dock-inner">
+      <div class="action-dock-status">
+        <span class="ack-ring{% if all_acknowledged %} ready{% endif %}" style="--pct:{{ ack_pct | int }}" aria-hidden="true">{% if all_acknowledged %}✓{% else %}{{ acknowledged_count }}/{{ ack_total }}{% endif %}</span>
+        <div class="action-dock-copy">
+          <p class="action-dock-title">{% if all_acknowledged %}Ready to approve{% else %}{{ acknowledged_count }} of {{ ack_total }} fields acknowledged{% endif %}</p>
+          <p class="tiny muted"><b>This tool does not submit anything.</b> Approving prepares your row and an evidence trail. You then submit it yourself in the CSF Form.</p>
+          {% if not all_acknowledged %}<p class="visually-hidden">Acknowledge every field above before export unlocks ({{ acknowledged_count }}/{{ ack_total }}).</p>{% endif %}
+        </div>
+      </div>
+      <div class="action-dock-actions">
+        <form method="post" action="/runs/{{ thread_id }}/acknowledge-all" data-busy="Updating…">
+          <button type="submit" class="btn">{% if all_acknowledged %}✓ All acknowledged{% else %}Acknowledge all{% endif %}</button>
+        </form>
+        <button class="btn btn-danger" data-action="open-delete" data-thread="{{ thread_id }}">Delete this draft</button>
+        <button class="btn btn-primary" data-action="open-approve"{% if not all_acknowledged %} disabled{% endif %}>Approve and export</button>
+      </div>
+    </div>
+    {% if fields %}
+      <nav class="ack-steps" aria-label="Fields to acknowledge">
+        {% if blockers %}<span class="visually-hidden">Before you can approve: {% for b in blockers %}{{ b }}{% endfor %}</span>{% endif %}
+        {% for name, proposal in fields %}
+          <a class="ack-step{% if proposal.edited_by_director %} done{% endif %}"
+             href="#field-{{ name }}" data-action="jump-field">
+            <span aria-hidden="true">{% if proposal.edited_by_director %}✓{% else %}○{% endif %}</span>{{ name.replace("_", " ") }}
+          </a>
+        {% endfor %}
+      </nav>
+    {% endif %}
+  {% endif %}
+</aside>
+{% endblock %}
+
+{% block dialogs %}
+<div class="overlay" id="approve-dialog" data-action="overlay-close" role="presentation" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h3>Approve this row for submission</h3>
+    <p class="rationale" style="margin-bottom:var(--s3)">This records your sign-off and prepares two files: the structured row, and the evidence trail behind it.</p>
+    <p class="rationale" style="margin-bottom:var(--s3)"><b>It does not submit anything to the CSF list.</b> You submit in the CSF Form.</p>
+    <p class="rationale">Source will be recorded as <b>{{ row.Source }}</b> — a row originating from the Personal Layer is not the director's own value to pick.</p>
+    <div class="dialog-actions">
+      <button class="btn" data-action="close-dialog">Cancel</button>
+      <form method="post" action="/runs/{{ thread_id }}/approve" data-busy="Approving…"><button type="submit" class="btn btn-primary">Approve and export</button></form>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="delete-dialog" data-action="overlay-close" role="presentation" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h3>Delete this draft?</h3>
+    <p class="rationale">The draft, the evidence index, your edits and the audit trail for this run are permanently removed. The evidence files themselves are untouched.</p>
+    <div class="dialog-actions">
+      <button class="btn" data-action="close-dialog">Cancel</button>
+      <form method="post" action="/runs/{{ thread_id }}/delete" id="delete-form" data-busy="Deleting…"><button type="submit" class="btn btn-danger">Delete</button></form>
+    </div>
+  </div>
+</div>
+{% endblock %}

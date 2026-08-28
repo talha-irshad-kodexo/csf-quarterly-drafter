@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import tl_badge, calculating %}
+{% block title %}Dashboard — CSF Personal Layer{% endblock %}
+
+{# Product-level view of the workspace. A run snapshot is one draft against
+   last quarter; this is every run, with the same traffic-light colours. #}
+{% block content %}
+<div class="stack">
+  <div>
+    <div class="eyebrow" style="margin-bottom:var(--s1)">Workspace</div>
+    <h1 class="page-title" style="margin-bottom:var(--s2)">Dashboard</h1>
+    <p class="small muted" style="max-width:68ch">Every draft in this workspace. This is not the institute Power BI model, and it does not submit anything. Open a run for the director snapshot of that row against last quarter.</p>
+  </div>
+
+  {% if not product.run_count %}
+    <div class="card empty">
+      <h2>No runs yet</h2>
+      <p>Start a run from the evidence folder and the traffic lights, progress figures and costs land here as they are derived.</p>
+      <a class="btn btn-primary" href="/runs/new">New run</a>
+    </div>
+  {% else %}
+    <div class="dash-tiles">
+      <div class="dash-tile" tabindex="0" data-tip="{{ product.running_tip }}">
+        <span class="dash-kicker">In flight</span>
+        <span class="dash-value tnum">{{ product.running }}</span>
+        <span class="dash-sub">of {{ product.run_count }} {{ "run" if product.run_count == 1 else "runs" }}</span>
+      </div>
+      <div class="dash-tile" tabindex="0" data-tip="{{ product.review_tip }}">
+        <span class="dash-kicker">Under review</span>
+        <span class="dash-value tnum">{{ product.review }}</span>
+        <span class="dash-sub">waiting on acknowledge</span>
+      </div>
+      <div class="dash-tile{% if product.approved %} dash-fill-Green{% endif %}" tabindex="0" data-tip="{{ product.approved_tip }}">
+        <span class="dash-kicker">Approved</span>
+        <span class="dash-value tnum">{{ product.approved }}</span>
+        <span class="dash-sub">ready to export · not submitted</span>
+      </div>
+      <div class="dash-tile" tabindex="0" data-tip="Average progress figure across drafts that have one. Denominators may not match.">
+        <span class="dash-kicker">Mean progress</span>
+        <span class="dash-value tnum">{% if product.mean_pg is not none %}{{ product.mean_pg }}%{% else %}—{% endif %}</span>
+        <span class="dash-sub">0–100 integer where proposed</span>
+      </div>
+      <div class="dash-tile" tabindex="0" data-tip="{{ product.cost_tip }}">
+        <span class="dash-kicker">Model calls</span>
+        <span class="dash-value tnum">{{ product.calls }}</span>
+        <span class="dash-sub">{{ product.tokens_in }} in / {{ product.tokens_out }} out</span>
+      </div>
+    </div>
+
+    <div class="dash-legend" role="list" aria-label="Traffic lights across drafts">
+      {% for item in product.lights %}
+        <div class="dash-legend-item dash-fill-{{ item.value }}" role="listitem" tabindex="0"
+             data-tip="{{ item.value }} — {{ item.anchor }}. {{ item.count }} {{ 'draft' if item.count == 1 else 'drafts' }}.">
+          <span class="dash-kicker" style="color:inherit">{{ item.glyph }} {{ item.value }}</span>
+          <span class="dash-value tnum" style="font-size:22px;line-height:26px">{{ item.count }}</span>
+          <span class="dash-legend-anchor">{{ item.anchor }}</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <table class="tbl">
+        <thead><tr><th>Quarter</th><th>Objective</th><th>Traffic light</th><th class="num">Progress</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for run in product.runs %}
+            <tr class="rowlink" data-action="open-run" data-href="/runs/{{ run.thread_id }}/dashboard" tabindex="0" role="link" aria-label="Open snapshot {{ run.quarter or run.thread_id }}">
+              <td class="mono tnum nowrap">{{ run.quarter or run.thread_id }}</td>
+              <td class="mono">{{ run.objective_id or "—" }}</td>
+              <td>
+                {%- if run.traffic_light -%}{{ tl_badge(run.traffic_light) }}
+                {%- elif run.status == "running" -%}{{ calculating() }}
+                {%- else -%}<span class="muted">—</span>{%- endif -%}
+              </td>
+              <td class="num tnum">{% if run.progress_percent is not none %}{{ run.progress_percent }}%{% elif run.status == "running" %}{{ calculating() }}{% else %}—{% endif %}</td>
+              <td>
+                {%- if run.status == "running" -%}<span class="pill pill-status run">running</span>
+                {%- elif run.status == "failed" -%}<span class="pill pill-status fail">failed</span>
+                {%- elif run.status == "staged" -%}<span class="pill pill-status ok">approved</span>
+                {%- else -%}<span class="pill pill-status">{{ run.status or "draft" }}</span>{%- endif -%}
+              </td>
+              <td class="num"><a class="link-btn tiny" href="/runs/{{ run.thread_id }}">review</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

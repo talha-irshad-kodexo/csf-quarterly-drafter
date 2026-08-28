@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Preparing your draft — {{ thread_id }}{% endblock %}
+{% block head %}<noscript><meta http-equiv="refresh" content="5"></noscript>{% endblock %}
+
+{# Transliterated from index.html's viewRunning(). The stage rows are the
+   same passes; the live log types them out so waiting is watching the method,
+   not a frozen checklist. #}
+{% block content %}
+{% set pipeline = stages | rejectattr("key", "equalto", "failed") | list %}
+{% set done_n = pipeline | selectattr("state", "equalto", "done") | list | length %}
+{% set total_n = pipeline | length %}
+{% set pct = ((done_n / total_n * 100) | round) if total_n else 0 %}
+<div class="run-prep">
+  <div class="run-prep-head">
+    <h1 class="page-title" style="margin-bottom:var(--s2)">Preparing your draft</h1>
+    <p class="small muted">{{ run_meta.quarter }} · {{ run_meta.objective_id }} · as of {{ as_of | fmt_date }} — each document is read on its own first; reconciliation is a separate pass with its rules written down.</p>
+  </div>
+  <div class="run-meter" aria-hidden="true">
+    <span class="run-meter-fill" id="run-meter-fill" style="width:{{ pct | int }}%"></span>
+  </div>
+  <p class="tiny subtle tnum" id="run-meter-label" style="margin-bottom:var(--s4)">{{ done_n }} of {{ total_n }} passes</p>
+
+  <div class="run-layout">
+    <div class="card card-pad">
+      <div class="stage-list" id="progress" data-thread="{{ thread_id }}">
+        {% for stage in stages %}
+          <div class="stage-row {{ stage.state }}" data-stage="{{ stage.key }}">
+            <span class="stage-ico" aria-hidden="true">{% if stage.state == 'done' %}✓{% elif stage.state == 'active' %}<span class="stage-spin"></span>{% elif stage.state == 'fail' %}✕{% else %}○{% endif %}</span>
+            <span class="stage-name">{{ stage.label }}</span>
+            <span class="stage-detail">{% if stage.state == 'active' and not stage.detail %}<span class="ellipsis" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>{% else %}{{ stage.detail }}{% endif %}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <aside class="run-stream card card-pad" aria-label="Live progress">
+      <div class="run-stream-head">
+        <span class="run-stream-dot" aria-hidden="true"></span>
+        What's happening
+      </div>
+      <div class="run-stream-log" id="run-stream" aria-live="polite"></div>
+    </aside>
+  </div>
+  <p class="tiny subtle" style="margin-top:var(--s4)">LLM calls so far: <span id="llm-count">{{ audit_counts.llm_calls if audit_counts else 0 }}</span> live · 0 cached</p>
+</div>
+{% endblock %}

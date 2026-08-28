@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Editing {{ filename }}{% endblock %}
+
+{# Split source + rendered view. The file is markdown; a director checking
+   whether the heading and the date will be read correctly should see that,
+   not only a textarea. #}
+{% block content %}
+<div class="md-edit">
+  <div class="md-edit-head">
+    <div>
+      <a class="link-btn small" href="/runs/new">← Back to the run setup</a>
+      <h1 class="page-title" style="margin:var(--s2) 0 var(--s1)">{{ filename }}</h1>
+      <p class="small muted">Plain markdown. The first heading becomes the title, and the date is read from the document when the draft runs.</p>
+    </div>
+    <span class="pill pill-status">{{ role_label }}</span>
+  </div>
+
+  {% if error %}<div class="banner banner-danger" style="margin-bottom:var(--s4)"><b>Not saved.</b> {{ error }}</div>{% endif %}
+
+  <div class="dash-tiles md-edit-meta">
+    <div class="dash-tile">
+      <span class="dash-kicker">Role</span>
+      <span class="dash-value" style="font-size:18px;line-height:24px">{{ role_label }}</span>
+      <span class="dash-sub">where the pipeline will look for this file</span>
+    </div>
+    <div class="dash-tile">
+      <span class="dash-kicker">Size</span>
+      <span class="dash-value tnum">{{ size_k }}k</span>
+      <span class="dash-sub">characters on disk</span>
+    </div>
+    <div class="dash-tile">
+      <span class="dash-kicker">File</span>
+      <span class="dash-value mono" style="font-size:16px;line-height:22px;word-break:break-all">{{ filename }}</span>
+      <span class="dash-sub">saved as markdown, not compiled</span>
+    </div>
+  </div>
+
+  <form method="post" action="/evidence/{{ filename }}/edit" class="md-edit-form">
+    <div class="md-split">
+      <div class="md-pane">
+        <div class="md-pane-label">Source</div>
+        <textarea class="textarea mono" name="text" id="md-source" data-md-source rows="22" spellcheck="false" aria-label="Document source">{{ text }}</textarea>
+      </div>
+      <div class="md-pane">
+        <div class="md-pane-label">Preview</div>
+        <div class="doc md-preview" id="md-preview">
+          {% for block in preview_blocks %}
+            <div class="md-block">{{ block.html | safe }}</div>
+          {% else %}
+            <p class="muted">Nothing to preview yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:var(--s3);margin-top:var(--s4)">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a class="btn btn-ghost" href="/runs/new">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

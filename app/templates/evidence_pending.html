@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Evidence — {{ thread_id }}{% endblock %}
+
+{# A run still in flight has no documents in graph state yet. The sidebar
+   still offers Evidence; JSON 404 there reads as the page missing. #}
+{% block content %}
+<div class="stack">
+  <div>
+    <div class="eyebrow" style="margin-bottom:var(--s1)">This run</div>
+    <h1 class="page-title" style="margin-bottom:var(--s2)">Evidence</h1>
+    <p class="small muted" style="max-width:68ch">The documents this run is reading appear here once the draft is ready. Citations on the review screen then point into these files, not at sentences the model invented.</p>
+  </div>
+  <div class="card card-pad">
+    <p style="font-size:16px;line-height:25px;margin-bottom:var(--s3)"><b>Still reading.</b></p>
+    <p class="rationale" style="margin-bottom:var(--s4)">Nothing has been lost — the folder is being classified and cited first. Open the snapshot or wait on the running screen.</p>
+    <div style="display:flex;gap:var(--s3);flex-wrap:wrap">
+      <a class="btn btn-primary" href="/runs/{{ thread_id }}">Back to this run</a>
+      <a class="btn" href="/runs/{{ thread_id }}/dashboard">Open snapshot</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

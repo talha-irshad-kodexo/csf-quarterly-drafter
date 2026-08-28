@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.doc_id }} — {{ doc.title }}{% endblock %}
+
+{# Transliterated from index.html's viewEvidence(): the document list on the
+   left, the document on the right with the cited parts marked.
+
+   index.html had one view of the document — the file's bytes, numbered. That
+   is exactly right for checking a citation and exactly wrong for reading: a
+   meeting note arrives as `**Chair:**` and a table of pipes, and a director
+   asked to judge whether a claim is fair should not have to parse markdown to
+   do it. So there are two, and the readable one is the default. #}
+{% block content %}
+<div style="margin-bottom:var(--s4)"><a class="link-btn small" href="{{ back }}">← Back to the field you came from</a></div>
+<div class="ev-layout">
+  <aside><div class="side-label" style="padding:0 0 var(--s2)">Documents · timeline</div>
+    <div class="ev-doclist card" style="padding:var(--s2)">
+      {% for id, d in docs.items() %}
+        <a class="{% if id == doc.doc_id %}active{% endif %}" href="/runs/{{ thread_id }}/evidence/{{ id }}?back={{ back | urlencode }}"><span class="mono">{{ id }}</span> <span class="ev-docname">{{ d.filename }}</span><br><span class="tiny subtle">{{ d.date_label }} · {{ d.source_type }}</span></a>
+      {% endfor %}
+    </div></aside>
+  <div>
+    <div style="margin-bottom:var(--s3)">
+      <h1 class="section-h mono" style="font-family:var(--font-ui)">{{ doc.filename }}</h1>
+      <p class="small muted" style="margin-top:4px"><span class="mono">{{ doc.doc_id }}</span> · {{ doc.date_label }} · {{ doc.source_type }} · <b>{{ doc.blocks | length }} citable blocks</b></p>
+    </div>
+    {% if doc.doc_date is none %}<div class="banner banner-warning" style="margin-bottom:var(--s3)">⚠ No date could be read from this document. Reconciliation turns on which account came later, so claims from it sort last and are marked <i>undated</i> wherever they appear.</div>{% endif %}
+    {% if cited_claims %}
+      <div style="margin-bottom:var(--s3)">
+        {% for claim in cited_claims %}
+          <p class="small" style="margin-bottom:var(--s2)"><span class="chip">{{ claim.claim_id }}</span> {{ claim.text }}</p>
+          {% for citation in claim.citations %}{% if citation.doc_id == doc.doc_id and citation.cited_text %}
+            <p class="anchor-quote" style="margin-bottom:var(--s2)">{{ citation.cited_text }}</p>
+          {% endif %}{% endfor %}
+        {% endfor %}
+        <p class="tiny subtle">The quoted text comes back from the API against the exact document it was sent, so a citation cannot point at a sentence nobody wrote.</p>
+      </div>
+    {% endif %}
+
+    <div class="tabset">
+      <div class="tabs" role="tablist" aria-label="How to read this document">
+        <button class="tab" data-action="tab" data-tab="document" role="tab" aria-selected="true">Document</button>
+        <button class="tab" data-action="tab" data-tab="source" role="tab" aria-selected="false">Source <span class="tab-count">{{ source_lines | length }} lines</span></button>
+      </div>
+
+      <div class="tab-panel" data-panel="document" role="tabpanel">
+        {# The cited blocks carry the same amber mark the cited lines do, so a
+           reader arriving from a citation lands on the passage either way. #}
+        <div class="doc">
+          {% for block in rendered %}
+            <div class="md-block{% if block.cited %} hl{% endif %}" id="R{{ block.line_start }}">{{ block.html | safe }}</div>
+          {% else %}
+            <p class="small muted">This document's file is no longer on disk, so there is nothing left to render. The blocks the run read are in the Source tab.</p>
+          {% endfor %}
+        </div>
+        {% if cited_lines %}
+          <p class="tiny subtle" style="margin-top:var(--s3)">{{ cited_lines | length }} cited {{ "line" if cited_lines | length == 1 else "lines" }} marked. Open <b>Source</b> to see them numbered — that is the form a citation is checked against.</p>
+        {% endif %}
+      </div>
+
+      <div class="tab-panel" data-panel="source" role="tabpanel">
+        <div class="codewrap" role="region" aria-label="Document source with line numbers">
+          {% for line in source_lines %}
+            <div class="codeline{% if line.cited %} hl{% endif %}" id="L{{ line.n }}"><span class="ln">{{ line.n }}</span><span class="lc">{{ line.text if line.text else " " }}</span></div>
+          {% endfor %}
+        </div>
+        <p class="tiny subtle" style="margin-top:var(--s3)">The file as it was written, unmodified. Line numbers are what the citations carry, so they only mean anything here.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

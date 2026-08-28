@@ -1,0 +1,103 @@
+/* Design tokens and base rules — copied verbatim from index.html.
+ * This file plus app.css concatenate back into index.html's <style> block.
+ * Do not paraphrase: the two builds must not drift.
+ */
+/* ================================================================
+   CSF Personal Layer · design tokens (doc 05 is authoritative)
+   Component code references tokens, never raw hex/px.
+   ================================================================ */
+:root{
+  color-scheme:light;
+  /* surfaces */
+  --color-canvas:#f4f6f7; --color-surface:#ffffff; --color-surface-2:#eef1f2;
+  --color-surface-3:#e4e9ea; --color-border:#d7dee1;
+  /* text */
+  --color-text:#182229; --color-text-muted:#5b6b72; --color-text-subtle:#8a979d;
+  /* brand */
+  --color-accent:#275e6e; --color-accent-hover:#1d4b59;
+  --color-accent-foreground:#ffffff; --color-ring:#2f7d93;
+  /* semantic */
+  --color-success:#15803d; --color-success-subtle:#e2f3e8;
+  --color-warning:#b45309; --color-warning-subtle:#fdf0d8;
+  --color-danger:#b91c1c;  --color-danger-subtle:#fbe4e4;
+  --color-info:#28607a;    --color-info-subtle:#e3eef4;
+  /* traffic light — closed vocabulary, own tokens (doc 05 §2.2) */
+  --color-tl-red:#b91c1c;   --color-tl-red-subtle:#fee2e2;
+  --color-tl-amber:#b45309; --color-tl-amber-subtle:#fef3c7;
+  --color-tl-green:#15803d; --color-tl-green-subtle:#dcfce7;
+  --color-tl-blue:#1d4ed8;  --color-tl-blue-subtle:#dbeafe;
+  --color-derived-bg:var(--color-surface-2);
+  --color-overridden-bg:var(--color-accent);
+  --color-citation-bg:var(--color-surface-2);
+  --color-citation-border:var(--color-border);
+  --color-input-border:var(--color-border);
+  /* component status (doc 05 §2.3) */
+  --color-status-met:var(--color-tl-green);
+  --color-status-partial:var(--color-tl-amber);
+  --color-status-not-met:var(--color-tl-red);
+  --color-status-unknown:var(--color-text-muted);
+  --color-status-unknown-ring:var(--color-warning);
+  /* layout */
+  --content-max:1040px; --sidebar-width:226px; --sidebar-rail:64px;
+  --header-height:56px;
+  /* The demo strip is gone — identity and storage are the platform layer's to
+     state, not a banner's. Kept at zero so the shell's height arithmetic
+     stays one expression instead of two. */
+  --demo-strip-height:0px;
+  --radius-sm:4px; --radius-md:8px; --radius-lg:12px;
+  /* spacing 4px scale */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+  /* Horizontal inset for every module page, the footer, and the review dock.
+     A length, not a max-width: zoom must not grow empty space on the sides. */
+  --page-gutter:var(--s5);
+  --font-ui:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-doc:'Source Serif 4',Georgia,'Times New Roman',serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --shadow-1:0 1px 2px rgba(16,26,32,.06),0 1px 3px rgba(16,26,32,.08);
+  --shadow-2:0 6px 24px rgba(16,26,32,.10),0 2px 6px rgba(16,26,32,.06);
+  --flash:#f5ebc8;
+}
+.dark{
+  color-scheme:dark;
+  --color-canvas:#0f1518; --color-surface:#151d21; --color-surface-2:#1b2529;
+  --color-surface-3:#223035; --color-border:#2b3a40;
+  --color-text:#e7edee; --color-text-muted:#9fb0b5; --color-text-subtle:#6f8288;
+  --color-accent:#5fb0c4; --color-accent-hover:#7cc3d4;
+  --color-accent-foreground:#0d1417; --color-ring:#66b7ca;
+  --color-success:#4ade80; --color-success-subtle:#123222;
+  --color-warning:#fbbf24; --color-warning-subtle:#33270a;
+  --color-danger:#f87171;  --color-danger-subtle:#3a1414;
+  --color-info:#7db8d4;    --color-info-subtle:#132732;
+  --color-tl-red:#f87171;   --color-tl-red-subtle:#3a1414;
+  --color-tl-amber:#fbbf24; --color-tl-amber-subtle:#33270a;
+  --color-tl-green:#4ade80; --color-tl-green-subtle:#14321f;
+  --color-tl-blue:#60a5fa;  --color-tl-blue-subtle:#10233d;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.35);
+  --shadow-2:0 8px 28px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.4);
+  --flash:#3c3a1e;
+  --color-input-border:#3d5158;
+  /* Restated as literals rather than inherited through :root's var()
+     indirection. index.html rebuilds the whole DOM when the theme changes, so
+     it never notices; this build swaps a class on <html>, and a token defined
+     only in :root keeps resolving against the light palette until a reload.
+     Same values — this is the one line that differs, and it is a bug fix. */
+  --color-derived-bg:#1b2529;
+  --color-citation-bg:#1b2529;
+  --color-citation-border:#2b3a40;
+}
+/* ============ base ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--color-canvas);color:var(--color-text);
+  font:400 15px/24px var(--font-ui);
+  font-feature-settings:'cv02','cv03','cv04';
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,h4,p{margin:0}
+a{color:var(--color-accent)}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+input,textarea,select{font:inherit;color:inherit}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--color-ring);outline-offset:2px;border-radius:var(--radius-sm)}
+::selection{background:var(--color-accent);color:var(--color-accent-foreground)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+

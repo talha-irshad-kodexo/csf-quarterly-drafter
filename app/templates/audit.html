@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import tl_badge %}
+{% block title %}Audit trail — {{ thread_id }}{% endblock %}
+
+{# index.html's viewAudit() was one column of stacked tables: run events, model
+   calls, director edits. That reads as a wall — the reviewer arrives with one
+   question ("what did it charge me", "what did I change", "what did the row
+   say before") and has to scroll past the other two to reach it. Same ledgers,
+   one per tab, and the tab is in the URL so a link can point at the right
+   one. #}
+{% block content %}
+<h1 class="page-title" style="margin-bottom:var(--s2)">Audit trail</h1>
+<p class="small muted" style="margin-bottom:var(--s5)"><span class="mono">{{ thread_id }}</span> · every handled failure path writes a row here. LLM calls: <b>{{ counts.llm_calls }} live · 0 cached</b> — the first run in a session is always fully live; there is no response cache in this build to be mistaken for hardcoded facts.</p>
+
+<div class="tabset">
+  <div class="tabs" role="tablist" aria-label="Audit ledgers">
+    <button class="tab" data-action="tab" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+    <button class="tab" data-action="tab" data-tab="events" role="tab" aria-selected="false">Run events <span class="tab-count">{{ events | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="calls" role="tab" aria-selected="false">Model calls <span class="tab-count">{{ llm_calls | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="edits" role="tab" aria-selected="false">Director edits <span class="tab-count">{{ edits | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="findings" role="tab" aria-selected="false">Findings <span class="tab-count">{{ acks | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="drafts" role="tab" aria-selected="false">Draft history <span class="tab-count">{{ snapshots | length }}</span></button>
+  </div>
+
+  <div class="tab-panel" data-panel="overview" role="tabpanel">
+    <div class="stack">
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s3)">This run</h2>
+      <dl class="kv">
+        <dt>Quarter</dt><dd class="mono">{{ run_row.quarter or run_meta.quarter or "—" }}</dd>
+        <dt>Objective</dt><dd class="mono">{{ run_row.objective_id or run_meta.objective_id or "—" }}</dd>
+        {% if run_row.objective_title %}<dt>Title</dt><dd>{{ run_row.objective_title }}</dd>{% endif %}
+        <dt>Status</dt>
+        <dd>
+          {%- if run_row.status == "running" -%}<span class="pill pill-status run">running</span>
+          {%- elif run_row.status == "failed" -%}<span class="pill pill-status fail">failed</span>
+          {%- elif run_row.status == "staged" -%}<span class="pill pill-status ok">approved</span>
+          {%- else -%}{{ run_row.status or "—" }}{%- endif -%}
+        </dd>
+        <dt>Started</dt><dd>{{ run_row.created_at | fmt_datetime }}</dd>
+        <dt>Reasoning model</dt><dd class="mono">{{ run_row.model or "—" }}</dd>
+        <dt>As of</dt><dd class="mono">{{ run_row.as_of or "—" }}</dd>
+        {% if run_row.staged_at %}<dt>Approved</dt><dd>{{ run_row.staged_at | fmt_datetime }}</dd>{% endif %}
+      </dl>
+    </div>
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s3)">What this run cost</h2>
+      <dl class="kv">
+        <dt>Pipeline events</dt><dd class="tnum">{{ counts.events }}</dd>
+        <dt>Model calls</dt><dd class="tnum">{{ counts.llm_calls }} live · 0 cached</dd>
+        <dt>Tokens</dt><dd class="tnum">{{ counts.llm_input_tokens }} in / {{ counts.llm_output_tokens }} out</dd>
+        <dt>Director edits</dt><dd class="tnum">{{ counts.edits }}</dd>
+        <dt>Row versions kept</dt><dd class="tnum">{{ snapshots | length }}</dd>
+      </dl>
+      <p class="tiny subtle" style="margin-top:var(--s3)">No prompt or response body is stored anywhere — the audit records what happened, not the evidence text twice.</p>
+    </div>
+    {% if documents %}
+      <div class="card card-pad">
+        <h2 class="section-h" style="margin-bottom:var(--s3)">What it read ({{ documents | length }})</h2>
+        <table class="tbl"><thead><tr><th>Id</th><th>File</th><th>Date</th><th class="num">Blocks</th></tr></thead><tbody>
+          {% for d in documents %}
+            <tr><td class="mono tiny">{{ d.doc_id }}</td><td class="mono tiny">{{ d.filename }}</td>
+            <td class="tiny nowrap">{{ d.doc_date | fmt_date }}</td><td class="num tiny tnum">{{ d.blocks }}</td></tr>
+          {% endfor %}
+        </tbody></table>
+        <p class="tiny subtle" style="margin-top:var(--s3)">The evidence folder is editable, so this is what the run actually read — not what is in the folder now.</p>
+      </div>
+    {% endif %}
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="events" role="tabpanel">
+    <div class="card card-pad"><table class="tbl"><tbody>
+      {% for e in events %}
+        <tr><td class="mono tiny nowrap">{{ e.at[11:19] if e.at else "—" }}</td><td class="mono tiny">{{ e.stage }}</td>
+        <td>{% if e.status == "failure" %}<span class="pill pill-sev-high">failure</span> {% endif %}{{ e.label }}{% if e.detail %} — {{ e.detail }}{% endif %}</td></tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No events recorded for this run.</td></tr>
+      {% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <div class="tab-panel" data-panel="calls" role="tabpanel">
+    <div class="card card-pad">
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Stage</th><th>Prompt</th><th>Model</th><th class="num">In</th><th class="num">Out</th><th class="num">Latency</th><th>Stop</th></tr></thead><tbody>
+        {% for c in llm_calls %}
+          <tr><td class="mono tiny">{{ c.stage }}</td><td class="mono tiny">{{ c.prompt_name }}</td><td class="mono tiny">{{ c.model }}</td>
+          <td class="num tiny tnum">{{ c.input_tokens if c.input_tokens is not none else "—" }}</td>
+          <td class="num tiny tnum">{{ c.output_tokens if c.output_tokens is not none else "—" }}</td>
+          <td class="num tiny tnum">{{ c.latency_ms }} ms</td><td class="tiny">{{ c.stop_reason or "—" }}</td></tr>
+        {% else %}
+          <tr><td colspan="7" class="muted">none yet</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      <p class="tiny subtle" style="margin-top:var(--s3)">No prompt or response body is stored anywhere — the audit records what happened, not the evidence text twice.</p></div>
+  </div>
+
+  <div class="tab-panel" data-panel="edits" role="tabpanel">
+    <div class="stack">
+    <div class="card card-pad">
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Time</th><th>Field</th><th>Kind</th><th class="num">Distance</th><th>Reason</th></tr></thead><tbody>
+        {% for e in edits %}
+          <tr><td class="mono tiny nowrap">{{ e.at[11:19] if e.at else "—" }}</td><td class="mono tiny">{{ e.field }}</td>
+          <td class="tiny">{{ e.edit_kind.replace("_", " ") }}</td>
+          <td class="tiny num tnum">{{ e.char_distance if e.char_distance is not none else "—" }}</td>
+          <td class="tiny">{{ e.reason or "—" }}</td></tr>
+        {% else %}
+          <tr><td colspan="5" class="muted">no edits — the draft has not been touched</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      <p class="tiny subtle" style="margin-top:var(--s3)">Append-only. Ten edits to one field are ten rows — a field edited repeatedly is a field the draft is getting wrong.</p></div>
+
+    {% if corrections %}
+      <div class="card card-pad">
+        <h2 class="section-h" style="margin-bottom:var(--s3)">Corrections carried with the row ({{ corrections | length }})</h2>
+        <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Field</th><th>Proposed</th><th>Director</th><th>Reason</th></tr></thead><tbody>
+          {# Jinja resolves both a pydantic attribute and a dict key the same
+             way, so this reads the same whether the corrections came from live
+             graph state or from the JSONL fallback. #}
+          {% for c in corrections %}
+            <tr><td class="mono tiny">{{ c.field }}</td>
+            <td class="tiny">{{ c.proposed_value | string | truncate(70) }}</td>
+            <td class="tiny">{{ c.director_value | string | truncate(70) }}</td>
+            <td class="tiny">{{ c.reason or "—" }}</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+        <p class="tiny subtle" style="margin-top:var(--s3)">One row per field — the current state. The ledger above is the history.</p></div>
+    {% endif %}
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="findings" role="tabpanel">
+    <div class="stack">
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s3)">Findings marked seen ({{ acks | length }})</h2>
+      <table class="tbl"><thead><tr><th>Time</th><th>Finding</th><th>Action</th></tr></thead><tbody>
+        {% for a in acks %}
+          <tr><td class="mono tiny nowrap">{{ a.at[11:19] if a.at else "—" }}</td><td class="tiny">{{ a.title or a.finding_id }}</td>
+          <td class="tiny">{{ "acknowledged" if a.acked else "acknowledgement withdrawn" }}</td></tr>
+        {% else %}
+          <tr><td colspan="3" class="muted">no conflict or gap has been marked seen</td></tr>
+        {% endfor %}
+      </tbody></table>
+      <p class="tiny subtle" style="margin-top:var(--s3)">Acknowledging a finding is not part of the approval gate. The gate is field-level, so a director cannot unlock export by clicking through findings.</p></div>
+
+    {% if cites %}
+      <div class="card card-pad">
+        <h2 class="section-h" style="margin-bottom:var(--s3)">Citations judged ({{ cites | length }})</h2>
+        <table class="tbl"><thead><tr><th>Time</th><th>Field</th><th>Citation</th><th>Judgement</th></tr></thead><tbody>
+          {% for c in cites %}
+            <tr><td class="mono tiny nowrap">{{ c.at[11:19] if c.at else "—" }}</td><td class="mono tiny">{{ c.field }}</td>
+            <td class="mono tiny">{{ c.ref }}</td>
+            <td class="tiny">{{ "marked irrelevant" if c.dismissed else "restored" }}</td></tr>
+          {% endfor %}
+        </tbody></table>
+        <p class="tiny subtle" style="margin-top:var(--s3)">Recorded rather than deleted: a director judging a citation unhelpful is a fact about the retrieval, and worth reading in aggregate.</p></div>
+    {% endif %}
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="drafts" role="tabpanel">
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s2)">Draft history ({{ snapshots | length }})</h2>
+      <p class="small muted" style="margin-bottom:var(--s4)">The checkpoint holds one row — what the draft says now. This is every version it has held, newest first, so a field can be read as it stood three edits ago.</p>
+      {% for s in snapshots %}
+        <details{% if loop.first %} open{% endif %} style="border-top:1px solid var(--color-border);padding:var(--s3) 0">
+          <summary class="small">
+            <b>{{ s.reason or "changed" }}</b>
+            <span class="subtle mono tiny">· {{ s.at | fmt_datetime }}</span>
+            {% if s.traffic_light %} · {{ tl_badge(s.traffic_light) }}{% endif %}
+            {% if s.progress_percent is not none %} <span class="tnum small">{{ s.progress_percent }}%</span>{% endif %}
+          </summary>
+          <dl class="kv" style="margin-top:var(--s3)">
+            {% for key, value in s.row.items() %}
+              <dt class="mono tiny">{{ key }}</dt>
+              <dd class="small">{% if value is none %}<span class="muted">—</span>{% elif value is sequence and value is not string %}{{ value | join(", ") or "—" }}{% else %}{{ value }}{% endif %}</dd>
+            {% endfor %}
+          </dl>
+        </details>
+      {% else %}
+        <p class="small muted">Nothing recorded yet. A version is kept each time the draft moves — when it is first written, on every field edit, and on approval.</p>
+      {% endfor %}
+      <p class="tiny subtle" style="margin-top:var(--s4)">Kept in <code class="inline">runs/workspace.db</code>, so it survives a restart and stays readable after the run folder is gone from the review UI.</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:var(--s5);display:flex;gap:var(--s3);flex-wrap:wrap">
+  <a class="btn btn-sm" href="/runs/{{ thread_id }}/audit.md">Download evidence trail</a>
+  <a class="btn btn-sm btn-ghost" href="/runs/{{ thread_id }}">Back to review</a>
+  <a class="btn btn-sm btn-ghost" href="/audit?run={{ thread_id }}">See it beside the other runs</a>
+</div>
+{% endblock %}

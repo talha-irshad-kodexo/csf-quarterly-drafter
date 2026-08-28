@@ -1,0 +1,168 @@
+{# Shared render helpers — transliterated from index.html's
+   tlBadge / stBadge / sevPill / chipHtml / chipsHtml. #}
+
+{% set TL_GLYPH = {"Red": "●", "Amber": "◐", "Green": "○", "Blue": "◆"} %}
+{% set ST_GLYPH = {"met": "●", "partially_met": "◐", "not_met": "✕", "unknown": "◌"} %}
+{% set ST_LABEL = {"met": "met", "partially_met": "partially met",
+                   "not_met": "not met", "unknown": "unknown"} %}
+
+{% macro tl_badge(value, lg=False) %}
+  {%- if not value -%}<span class="muted">—</span>
+  {%- else -%}<span class="badge {% if lg %}badge-lg {% endif %}tl-{{ value }}"><span class="glyph" aria-hidden="true">{{ TL_GLYPH.get(value, "•") }}</span>{{ value }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# While a run is still deriving the light, a dash looks like "none" rather
+   than "not yet". Animated dots so the cell reads as work in progress. #}
+{% macro calculating(label="calculating") %}
+  <span class="calculating" aria-label="{{ label }}"><span class="calculating-label">{{ label }}</span><span class="ellipsis" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
+{% endmacro %}
+
+{% macro st_badge(status) %}
+  <span class="st-badge st-{{ status }}"><span class="glyph" aria-hidden="true">{{ ST_GLYPH.get(status, "◌") }}</span>{{ ST_LABEL.get(status, status) }}</span>
+{% endmacro %}
+
+{% macro sev_pill(severity) %}<span class="pill pill-sev-{{ severity }}">{{ severity }}</span>{% endmacro %}
+
+{# A citation chip. index.html links to a line range inside a document; here
+   the address is the claim id, which is what the rationales reference in
+   square brackets, and the server resolves it to the cited lines. #}
+{% macro chip(claim_id, claims, thread_id, back="", dismissed=False, dismissable=False, field="") %}
+  {%- set claim = claims.get(claim_id) -%}
+  {%- if not claim -%}
+    <span class="chip dismissed" title="unresolved citation">{{ claim_id }}</span>
+  {%- else -%}
+    <a class="chip{% if dismissed %} dismissed{% endif %}"
+       href="/runs/{{ thread_id }}/evidence/{{ claim.doc_id }}?claim={{ claim_id }}{% if back %}&back={{ back | urlencode }}{% endif %}"
+       data-tip="{{ claim.text | truncate(120) }}"
+       aria-label="Evidence {{ claim_id }} in {{ claim.doc_id }}">{{ claim_id }}{% if dismissable %}<button class="dismiss-x" data-action="dismiss-cite" data-field="{{ field }}" data-ref="{{ claim_id }}" data-thread="{{ thread_id }}" aria-label="Mark citation {{ claim_id }} irrelevant" title="Mark irrelevant">✕</button>{% endif %}</a>
+  {%- endif -%}
+{% endmacro %}
+
+{# Inline mark inside a sentence, so [E1.1] is a link rather than decoration. #}
+{% macro cite_mark(claim_id, claims, thread_id, back="") %}
+  {%- set claim = claims.get(claim_id) -%}
+  {%- if not claim -%}
+    <span class="cite-mark unresolved" title="unresolved citation">{{ claim_id }}</span>
+  {%- else -%}
+    <a class="cite-mark" href="/runs/{{ thread_id }}/evidence/{{ claim.doc_id }}?claim={{ claim_id }}{% if back %}&back={{ back | urlencode }}{% endif %}"
+       data-tip="{{ claim.text | truncate(140) }}"
+       aria-label="Open evidence {{ claim_id }} in {{ claim.doc_id }}">{{ claim_id }}</a>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro chips(claim_ids, claims, thread_id, back="", dismissed=[], dismissable=False, field="") %}
+  {%- if not claim_ids -%}
+    <span class="tiny subtle">this field cites nothing — it says so rather than pretending</span>
+  {%- else -%}
+    <div class="chips">
+      {%- for claim_id in claim_ids -%}
+        {{ chip(claim_id, claims, thread_id, back, claim_id in dismissed, dismissable, field) }}
+      {%- endfor -%}
+    </div>
+  {%- endif -%}
+{% endmacro %}
+
+{# Prose that cites. Any sentence carrying [E5.5, E5.6] gets a row of real
+   chips underneath, so a reference inside an argument can be opened rather
+   than only read.
+
+   Every reference in the sentence gets a chip, including ones already shown
+   elsewhere in the card. Skipping duplicates seemed tidier and was worse: a
+   sentence citing four sources with one chip under it reads as three broken
+   links, and the reader has no way to tell which. The row must agree with the
+   sentence it sits under. #}
+{# One citation row for a block that has both its own claim ids and ids cited
+   inside its prose. The union, in order, rendered once.
+
+   Rendering the two separately put the same ids on screen twice — the field's
+   Evidence row and the rationale's row are near-identical by construction,
+   because a rationale cites what the field rests on. #}
+{% macro cite_row(claim_ids, text, claims, thread_id, back="") %}
+  {%- set refs = [] -%}
+  {%- for ref in (claim_ids or []) + (text | claim_refs) -%}
+    {%- if ref not in refs -%}{% set _ = refs.append(ref) %}{%- endif -%}
+  {%- endfor -%}
+  {{ chips(refs, claims, thread_id, back) }}
+{% endmacro %}
+
+{% macro cited_prose(text, claims, thread_id, back="", cls="rationale", rich=False) %}
+  {%- if text -%}
+    <div class="cited{% if rich %} cited-rich{% endif %}">
+      {%- if rich -%}
+        {%- for para in text | cite_tokens -%}
+          <p class="cited-p">
+            {%- for tok in para -%}
+              {%- if tok.kind == "refs" -%}
+                <span class="cite-inline">[{%- for ref in tok.refs -%}{{ cite_mark(ref, claims, thread_id, back) }}{%- if not loop.last -%}, {% endif -%}{%- endfor -%}]</span>
+              {%- else -%}{{ tok.text }}{%- endif -%}
+            {%- endfor -%}
+          </p>
+        {%- endfor -%}
+        {%- set refs = text | claim_refs -%}
+        {%- if refs -%}
+          <div class="cited-quotes">
+            {%- for ref in refs -%}
+              {%- set claim = claims.get(ref) -%}
+              {%- if claim -%}
+                <blockquote class="cited-quote">
+                  <div class="cited-quote-head">{{ cite_mark(ref, claims, thread_id, back) }}<span class="tiny muted">{{ claim.doc_id }}</span></div>
+                  <p class="cited-quote-text">“{{ claim.text }}”</p>
+                </blockquote>
+              {%- endif -%}
+            {%- endfor -%}
+          </div>
+        {%- endif -%}
+      {%- else -%}
+        <p class="{{ cls }}">{{ text }}</p>
+        {%- set refs = text | claim_refs -%}
+        {%- if refs -%}
+          <div class="chips" style="margin-top:var(--s2)">
+            {%- for ref in refs -%}{{ chip(ref, claims, thread_id, back) }}{%- endfor -%}
+          </div>
+        {%- endif -%}
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+{% endmacro %}
+
+{# The short rationale is always on the card. This is the long argument, and
+   it has to look like a control — a bare <summary> reads as a caption. #}
+{% macro why_full(text, claims, thread_id, back="") %}
+  {%- if text -%}
+    <details class="why-full">
+      <summary class="btn btn-sm why-full-btn">Why, in full <span class="why-full-caret" aria-hidden="true">▾</span></summary>
+      <div class="why-full-body">{{ cited_prose(text, claims, thread_id, back, "cited-p", true) }}</div>
+    </details>
+  {%- endif -%}
+{% endmacro %}
+
+{# An attention group. Renders nothing at all when the count is zero, exactly
+   as index.html's attnGroupHtml does. #}
+{% macro attn_group(id, title, count, open=False) %}
+  {%- if count -%}
+    <section class="attn-group{% if open %} open{% endif %}" aria-labelledby="ag-{{ id }}">
+      <button class="attn-head" data-action="toggle-attn" id="ag-{{ id }}" aria-expanded="{{ 'true' if open else 'false' }}">
+        <span>{{ title }}</span><span class="attn-count">{{ count }}</span><span class="attn-caret" aria-hidden="true">›</span>
+      </button>
+      <div class="attn-body">{{ caller() }}</div>
+    </section>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro ack_row(kind, ident, title, acknowledged, thread_id) %}
+  <div class="ack-row">
+    {% if acknowledged %}
+      <span class="ack-done">✓ Acknowledged</span>
+      <form method="post" action="/runs/{{ thread_id }}/finding/{{ ident }}">
+        <input type="hidden" name="title" value="{{ title }}">
+        <button type="submit" class="link-btn tiny">undo</button>
+      </form>
+    {% else %}
+      <form method="post" action="/runs/{{ thread_id }}/finding/{{ ident }}">
+        <input type="hidden" name="title" value="{{ title }}">
+        <button type="submit" class="btn btn-sm">Acknowledge</button>
+      </form>
+    {% endif %}
+  </div>
+{% endmacro %}

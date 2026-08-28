@@ -1,0 +1,163 @@
+{# Director snapshot module. Compact on the review screen; full on /dashboard.
+   Colours are the closed traffic-light tokens. Hover copy lives on data-tip. #}
+{% from "partials/macros.html" import tl_badge, calculating %}
+
+{% macro _tip(el, text) -%}
+  tabindex="0" data-tip="{{ text }}"
+{%- endmacro %}
+
+{% macro _fill(tone) -%}
+  {%- if tone %} dash-fill-{{ tone }}{% endif -%}
+{%- endmacro %}
+
+{% macro _move(kind, tips) -%}
+  {%- if kind == "changed" -%}
+    <span class="dash-move dash-move-changed" {{ _tip("span", tips.changed) }}>changed</span>
+  {%- elif kind == "same" -%}
+    <span class="dash-move dash-move-same" {{ _tip("span", tips.same) }}>same</span>
+  {%- elif kind == "new" -%}
+    <span class="dash-move" {{ _tip("span", tips.new) }}>new</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro _text(value) -%}
+  {%- if value -%}“{{ value }}”{%- else -%}<span class="muted">—</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro _list(value) -%}
+  {%- if value -%}{{ value | join("; ") }}{%- else -%}<span class="muted">—</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro snapshot(dash, thread_id, mode="compact") %}
+<section class="dash dash-{{ mode }}" aria-label="Draft snapshot">
+  <div class="dash-head">
+    <div>
+      <div class="eyebrow" style="margin-bottom:var(--s1)">At a glance</div>
+      <h2 class="section-h" style="margin:0">This draft vs last quarter</h2>
+    </div>
+    {% if mode == "compact" %}
+      <a class="link-btn small" href="/runs/{{ thread_id }}/dashboard">Open full snapshot</a>
+    {% else %}
+      <a class="link-btn small" href="/runs/{{ thread_id }}">Back to the review screen</a>
+    {% endif %}
+  </div>
+
+  <div class="dash-tiles">
+    <a class="dash-tile{{ _fill(dash.current_tl) }}" href="/runs/{{ thread_id }}#field-Traffic_Light"
+       {{ _tip("a", dash.tl_tip) }}>
+      <span class="dash-kicker">Traffic light</span>
+      <span class="dash-value">{% if dash.current_tl %}<span aria-hidden="true">{{ dash.tl_glyph }}</span> {{ dash.current_tl }}{% elif dash.pending %}{{ calculating() }}{% else %}—{% endif %}</span>
+      <span class="dash-sub">{% if dash.pending and not dash.current_tl %}still deriving{% else %}this draft · closed vocabulary{% endif %}</span>
+    </a>
+
+    <a class="dash-tile{{ _fill(dash.current_tl if dash.current_pg is not none else '') }}" href="/runs/{{ thread_id }}#field-Progress_Percent"
+       {{ _tip("a", dash.pg_tip) }}>
+      <span class="dash-kicker">Progress</span>
+      <span class="dash-value tnum">{% if dash.current_pg is not none %}{{ dash.current_pg }}%{% elif dash.pending %}{{ calculating() }}{% else %}—{% endif %}</span>
+      <span class="dash-bar" aria-hidden="true"><span class="dash-bar-fill" style="width:{{ dash.current_pg or 0 }}%"></span>
+        {% if dash.prior_pg is not none %}<span class="dash-bar-prior" style="left:{{ dash.prior_pg }}%"></span>{% endif %}</span>
+      <span class="dash-sub">{% if dash.prior_pg is not none %}last quarter {{ dash.prior_pg }}%{% else %}0–100 integer{% endif %}</span>
+    </a>
+
+    <div class="dash-tile{{ _fill(dash.days_tone) }}" {{ _tip("div", dash.days_tip) }}>
+      <span class="dash-kicker">Days remaining</span>
+      <span class="dash-value tnum">{% if dash.days is none %}—{% elif dash.days < 0 %}{{ dash.days|abs }} overdue{% else %}{{ dash.days }}{% endif %}</span>
+      <span class="dash-sub">against the objective's target</span>
+    </div>
+
+    <a class="dash-tile{{ _fill(dash.attention_tone) }}" href="/runs/{{ thread_id }}#attn"
+       {{ _tip("a", dash.attention_tip) }}>
+      <span class="dash-kicker">Needs attention</span>
+      <span class="dash-value tnum">{{ dash.conflicts + dash.gaps }}</span>
+      <span class="dash-sub">{{ dash.conflicts }} contradicted · {{ dash.gaps }} unsettled</span>
+    </a>
+
+    <div class="dash-tile{{ _fill(dash.review_tone) }}" {{ _tip("div", dash.review_tip) }}>
+      <span class="dash-kicker">Fields checked</span>
+      <span class="dash-value tnum">{{ dash.acknowledged }}/{{ dash.total_fields }}</span>
+      <span class="dash-sub">acknowledge is the human gate, not a comparison</span>
+    </div>
+  </div>
+
+  {% if dash.has_prior %}
+    <div class="dash-compare">
+      <div class="dash-compare-head">
+        <div class="field-label" style="margin:0">Your submitted {{ dash.prior_quarter }} update</div>
+        {% if dash.prior_submitted %}<span class="tiny subtle">submitted {{ dash.prior_submitted }}</span>{% endif %}
+      </div>
+      <div class="dash-vs">
+        <div class="dash-vs-col">
+          <div class="tiny subtle" style="margin-bottom:var(--s2)">Last quarter</div>
+          <div class="dash-vs-pair">
+            <span class="dash-swatch{{ _fill(dash.prior_tl) }}" {{ _tip("span", dash.prior_tl_tip) }}>
+              {% if dash.prior_tl %}<span aria-hidden="true">{{ dash.prior_tl_glyph }}</span> {{ dash.prior_tl }}{% else %}—{% endif %}
+            </span>
+            <span class="dash-pg tnum" {{ _tip("span", "Last quarter progress figure.") }}>{% if dash.prior_pg is not none %}{{ dash.prior_pg }}%{% else %}—{% endif %}</span>
+          </div>
+        </div>
+        <div class="dash-vs-arrow" aria-hidden="true">→</div>
+        <div class="dash-vs-col">
+          <div class="tiny subtle" style="margin-bottom:var(--s2)">This draft</div>
+          <div class="dash-vs-pair">
+            <span class="dash-swatch{{ _fill(dash.current_tl) }}" {{ _tip("span", dash.tl_tip) }}>
+              {% if dash.current_tl %}<span aria-hidden="true">{{ dash.tl_glyph }}</span> {{ dash.current_tl }}{% else %}—{% endif %}
+            </span>
+            <span class="dash-pg tnum" {{ _tip("span", dash.pg_tip) }}>{% if dash.current_pg is not none %}{{ dash.current_pg }}%{% else %}—{% endif %}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if mode == "full" %}
+    <p class="rationale dash-trend-note" {{ _tip("p", dash.trend_note) }}>{{ dash.trend_note }}</p>
+
+    <div class="dash-legend" role="list">
+      {% for item in dash.legend %}
+        <div class="dash-legend-item{{ _fill(item.value) }}" role="listitem" {{ _tip("div", item.tip) }}>
+          <span aria-hidden="true">{{ item.glyph }}</span>
+          <span>{{ item.value }}</span>
+          <span class="dash-legend-anchor">{{ item.anchor }}</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div style="overflow:auto">
+      <table class="tbl dash-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Last quarter</th>
+            <th>This draft</th>
+            <th>Movement</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in dash.compare %}
+            <tr>
+              <td><a href="/runs/{{ thread_id }}#field-{{ row.field }}">{{ row.label }}</a></td>
+              <td {{ _tip("td", row.prior_tip) }}>
+                {% if row.kind == "traffic" %}{{ tl_badge(row.prior) }}
+                {% elif row.kind == "progress" %}<span class="tnum">{% if row.prior is not none %}{{ row.prior }}%{% else %}—{% endif %}</span>
+                {% elif row.kind == "list" %}{{ _list(row.prior) }}
+                {% else %}<span class="serif dash-quote">{{ _text(row.prior) }}</span>{% endif %}
+              </td>
+              <td {{ _tip("td", row.current_tip) }}>
+                {% if row.kind == "traffic" %}{{ tl_badge(row.current) }}
+                {% elif row.kind == "progress" %}<span class="tnum">{% if row.current is not none %}{{ row.current }}%{% else %}—{% endif %}</span>
+                {% elif row.kind == "list" %}{{ _list(row.current) }}
+                {% else %}<span class="serif dash-quote">{{ _text(row.current) }}</span>{% endif %}
+              </td>
+              <td>{{ _move(row.movement, dash.movement_tips) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if dash.success_measure %}
+      <p class="small muted" style="margin-top:var(--s4)">Success measure: <span class="serif" style="font-style:italic">“{{ dash.success_measure }}”</span></p>
+    {% endif %}
+  {% endif %}
+</section>
+{% endmacro %}

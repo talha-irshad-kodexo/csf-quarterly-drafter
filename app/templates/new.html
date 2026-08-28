@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Start a run — CSF Personal Layer{% endblock %}
+
+{# Transliterated from index.html's viewNew(). Same dropzone, same filelist,
+   same role-sel dropdown per file, same grid-2 of run parameters, same action
+   row with a disabled primary until the run is ready. #}
+{% block content %}
+<h1 class="page-title" style="margin-bottom:var(--s2)">Start a run</h1>
+<p class="small muted" style="max-width:64ch;margin-bottom:var(--s5)">The folder should contain the objective record, the previous quarter's submitted update, and the quarter's evidence as Markdown or text files. Files are read in filename order.</p>
+{% if not has_key %}<div class="banner banner-warning" style="margin-bottom:var(--s4)"><b>LLM not configured.</b> Every pass in this workflow calls the model. <button class="link-btn" data-action="open-settings">Add your Anthropic API key</button> — that is the one line needed before a run can start.</div>{% endif %}
+<div class="stack">
+  <div class="card card-pad">
+    <form method="post" action="/evidence/add" enctype="multipart/form-data" id="dropzone-form" data-busy="Adding…">
+      <div class="dropzone" id="dropzone" data-action="pick-files" role="button" tabindex="0" aria-label="Add evidence files">
+        <div style="font-size:15px;font-weight:500;color:var(--color-text);margin-bottom:4px">Drop the quarter's files here</div>
+        <div class="small">Markdown or plain text · or <span class="link-btn">browse</span></div>
+        <input type="file" id="filepick" name="files" multiple accept=".md,.markdown,.txt,text/plain,text/markdown" style="display:none">
+      </div>
+    </form>
+    {# The zone used to print the folder the files land in — a fact about where
+       the tool keeps its state, and no help at all to someone looking at an
+       empty workspace. This is the thing they actually want next. #}
+    <div class="dropzone-alt">
+      <form method="post" action="/evidence/demo" data-busy="Loading…">
+        <button type="submit" class="btn btn-sm">Load the demo pack instead</button>
+      </form>
+    </div>
+    {% if files %}
+      <div class="filelist">
+        {% for file in files %}
+          {# Name and date on the left, the controls that change the file on the
+             right. .file-id takes the slack so the actions sit on the edge and
+             line up down the list rather than tracking each filename's length. #}
+          <div class="filerow">
+            <span class="file-id">
+              <span class="fname" title="{{ file.name }}">{{ file.name }}</span>
+              <span class="tiny subtle nowrap">{{ file.date_label or "no date read" }} · {{ file.size_k }}k chars</span>
+            </span>
+            <span class="file-actions">
+              <form method="post" action="/evidence/{{ file.name }}/role">
+                <select class="role-sel" name="role" data-action="set-role" aria-label="Role for {{ file.name }}">
+                  <option value="evidence"{% if file.role == 'evidence' %} selected{% endif %}>Evidence</option>
+                  <option value="objective"{% if file.role == 'objective' %} selected{% endif %}>Objective record</option>
+                  <option value="prior"{% if file.role == 'prior' %} selected{% endif %}>Previous quarter row</option>
+                </select>
+                <noscript><button type="submit" class="btn btn-ghost btn-sm">set</button></noscript>
+              </form>
+              <a class="btn btn-sm" href="/evidence/{{ file.name }}/edit" aria-label="Edit {{ file.name }}">Edit</a>
+              <form method="post" action="/evidence/{{ file.name }}/delete">
+                <button type="submit" class="btn btn-ghost btn-sm" aria-label="Remove {{ file.name }}">✕</button>
+              </form>
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+      <p class="tiny subtle" style="margin-top:var(--s3)">{{ files | length }} {{ "file" if files | length == 1 else "files" }} · {% if objective.get("Objective_ID") %}objective record identified{% else %}⚠ mark one file as the Objective record{% endif %} · {{ docs | length }} evidence {{ "document" if docs | length == 1 else "documents" }}</p>
+    {% endif %}
+    {% if not docs %}<p class="tiny subtle" style="margin-top:var(--s3)">⚠ Nothing to read yet. Add an email, a chat extract, a meeting note — whatever the director would have.</p>{% endif %}
+  </div>
+  <div class="card card-pad">
+    <div class="grid-2">
+      <div class="f-row"><label class="field-label" for="f-obj">Objective</label>
+        <input class="input mono" id="f-obj" value="{{ objective.get('Objective_ID', '') }}" readonly placeholder="read from the objective record">
+        <span class="helper">Read from the objective record.</span></div>
+      <div class="f-row"><label class="field-label" for="f-q">Quarter</label>
+        <input class="input mono" id="f-q" name="quarter" form="run-form" value="{{ quarter }}" placeholder="2026-Q3">
+        <span class="helper">Pattern <code class="inline">YYYY-QN</code> — validated before display, enforced again at the gate.</span></div>
+      <div class="f-row"><label class="field-label" for="f-asof">As-of date <span style="text-transform:none;font-weight:400">(optional)</span></label>
+        <input class="input mono" id="f-asof" type="date" name="as_of" form="run-form" value="{{ as_of }}">
+        <span class="helper">Days-remaining arithmetic is relative to this date.</span></div>
+    </div>
+    {# No counterpart in index.html, which reads the objective from the file and
+       offers no way to change it. Kept because the success measure is what the
+       traffic light is judged against, and a tool that can read it but not
+       correct it sends the director to a text editor. #}
+    <details style="margin-top:var(--s4)">
+      <summary class="small">Edit the objective record</summary>
+      <form method="post" action="/objective" class="stack" style="--s5:16px;margin-top:var(--s3)">
+        <div class="f-row"><label class="field-label" for="o-id">Objective ID</label>
+          <input class="input mono" id="o-id" name="Objective_ID" value="{{ objective.get('Objective_ID', '') }}"></div>
+        <div class="f-row"><label class="field-label" for="o-title">Title</label>
+          <textarea class="textarea" id="o-title" name="Title" rows="2">{{ objective.get("Title", "") }}</textarea></div>
+        <div class="f-row"><label class="field-label" for="o-measure">Success measure</label>
+          <textarea class="textarea" id="o-measure" name="Success_Measure" rows="3">{{ objective.get("Success_Measure", "") }}</textarea>
+          <span class="helper">The traffic light is assessed against this, not against how much work was done.</span></div>
+        <div class="f-row"><label class="field-label" for="o-target">Target completion</label>
+          <input class="input mono" id="o-target" name="Target_Completion" value="{{ objective.get('Target_Completion', '') }}"></div>
+        <div><button type="submit" class="btn btn-sm">Save objective</button></div>
+      </form>
+    </details>
+  </div>
+  <div style="display:flex;gap:var(--s3);align-items:center">
+    <form method="post" action="/runs" id="run-form" data-busy="Reading the evidence…">
+      <button type="submit" class="btn btn-primary"{% if not ready %} disabled{% endif %}>Run the pipeline</button>
+    </form>
+    <a class="btn btn-ghost" href="/">Back to runs</a>
+    {% if not ready %}<span class="tiny subtle">{% if not docs %}No evidence to read — add some above. {% endif %}{% if not has_key %}No model connected — add a key. {% endif %}Needs an objective record, at least one evidence file, and a model connected.</span>{% endif %}
+  </div>
+</div>
+{% endblock %}

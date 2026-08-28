@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import tl_badge, calculating %}
+{% block title %}Audit trail — CSF Personal Layer{% endblock %}
+
+{# The trail across the workspace, not one run's. The per-run page answers
+   "what happened in this draft"; this one answers the questions a workspace
+   gets asked once it holds more than one — what did this cost in total, which
+   fields keep getting rewritten, what did last quarter's row say. #}
+{% block content %}
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;margin-bottom:var(--s2)">
+  <h1 class="page-title">Audit trail</h1>
+  {% if filter_run %}
+    <a class="btn btn-sm btn-ghost" href="/audit">Show every run</a>
+  {% endif %}
+</div>
+<p class="small muted" style="max-width:70ch;margin-bottom:var(--s5)">
+  Each run writes its own append-only trail next to its draft; this is the index over all of them, kept in <code class="inline">{{ db_path.name }}</code> under the runs folder.
+  {% if filter_run %}Filtered to <span class="mono">{{ filter_run }}</span>.{% endif %}
+</p>
+
+{% if not totals.runs and not totals.events %}
+  <div class="card empty">
+    <div class="eyebrow" style="margin-bottom:var(--s3)">Nothing has happened yet</div>
+    <h2>No runs recorded</h2>
+    <p>Every pipeline stage, model call and director edit lands here as it happens. Start a run and this page fills in behind it — including what each call cost and what the row said before you changed it.</p>
+    <div style="display:flex;gap:var(--s3);justify-content:center;flex-wrap:wrap">
+      <a class="btn btn-primary" href="/runs/new">New run</a>
+      <a class="btn" href="/">Back to runs</a>
+    </div>
+  </div>
+{% else %}
+<div class="tabset">
+  <div class="tabs" role="tablist" aria-label="Workspace ledgers">
+    <button class="tab" data-action="tab" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+    <button class="tab" data-action="tab" data-tab="activity" role="tab" aria-selected="false">Activity <span class="tab-count">{{ events | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="calls" role="tab" aria-selected="false">Model calls <span class="tab-count">{{ llm_calls | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="edits" role="tab" aria-selected="false">Director edits <span class="tab-count">{{ edits | length }}</span></button>
+    <button class="tab" data-action="tab" data-tab="drafts" role="tab" aria-selected="false">Draft history <span class="tab-count">{{ snapshots | length }}</span></button>
+  </div>
+
+  <div class="tab-panel" data-panel="overview" role="tabpanel">
+    <div class="stack">
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s3)">Across every run</h2>
+      <dl class="kv">
+        <dt>Runs recorded</dt><dd class="tnum">{{ totals.runs }}</dd>
+        <dt>Pipeline events</dt><dd class="tnum">{{ totals.events }}</dd>
+        <dt>Model calls</dt><dd class="tnum">{{ totals.llm_calls }} live · 0 cached</dd>
+        <dt>Tokens</dt><dd class="tnum">{{ totals.llm_input_tokens }} in / {{ totals.llm_output_tokens }} out</dd>
+        <dt>Director edits</dt><dd class="tnum">{{ totals.edits }}</dd>
+        <dt>Findings marked seen</dt><dd class="tnum">{{ totals.acks }}</dd>
+        <dt>Row versions kept</dt><dd class="tnum">{{ totals.drafts }}</dd>
+      </dl>
+      <p class="tiny subtle" style="margin-top:var(--s3)">No prompt or response body is stored anywhere — the trail records what happened, not the evidence text a second time.</p>
+    </div>
+
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s3)">Runs ({{ runs | length }})</h2>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Quarter</th><th>Objective</th><th>Status</th><th>Traffic light</th><th>Started</th><th>Model</th><th></th></tr></thead>
+        <tbody>
+          {% for r in runs %}
+            <tr>
+              <td class="mono tnum nowrap">{{ r.quarter or "—" }}</td>
+              <td class="mono tiny">{{ r.objective_id or "—" }}</td>
+              <td class="tiny">{{ r.status or "—" }}</td>
+              <td>{% if r.status == "running" and not r.traffic_light %}{{ calculating() }}{% else %}{{ tl_badge(r.traffic_light) }}{% endif %}</td>
+              <td class="tiny nowrap muted">{{ r.created_at | fmt_datetime }}</td>
+              <td class="mono tiny">{{ r.model or "—" }}</td>
+              <td class="num tiny nowrap"><a class="link-btn tiny" href="/audit?run={{ r.thread_id }}">only this</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="muted">no runs indexed</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+      <p class="tiny subtle" style="margin-top:var(--s3)">A row stays here after its draft is deleted only if the delete failed — deleting a run removes its index rows with it.</p>
+    </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="activity" role="tabpanel">
+    <div class="card card-pad">
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>When</th><th>Run</th><th>Stage</th><th>What happened</th></tr></thead><tbody>
+          {% for e in events %}
+            <tr>
+              <td class="mono tiny nowrap">{{ e.at | fmt_datetime }}</td>
+              <td class="mono tiny"><a href="/runs/{{ e.thread_id }}/audit">{{ e.thread_id }}</a></td>
+              <td class="mono tiny">{{ e.stage }}</td>
+              <td class="tiny">{% if e.status == "failure" %}<span class="pill pill-sev-high">failure</span> {% endif %}{{ e.label }}{% if e.detail %} — {{ e.detail }}{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="muted">nothing recorded</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+      <p class="tiny subtle" style="margin-top:var(--s3)">Newest first, most recent 300.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="calls" role="tabpanel">
+    <div class="card card-pad">
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>When</th><th>Run</th><th>Stage</th><th>Model</th><th class="num">In</th><th class="num">Out</th><th class="num">Latency</th><th>Stop</th></tr></thead><tbody>
+          {% for c in llm_calls %}
+            <tr>
+              <td class="mono tiny nowrap">{{ c.at | fmt_datetime }}</td>
+              <td class="mono tiny"><a href="/runs/{{ c.thread_id }}/audit">{{ c.thread_id }}</a></td>
+              <td class="mono tiny">{{ c.stage }}</td>
+              <td class="mono tiny">{{ c.model }}</td>
+              <td class="num tiny tnum">{{ c.input_tokens if c.input_tokens is not none else "—" }}</td>
+              <td class="num tiny tnum">{{ c.output_tokens if c.output_tokens is not none else "—" }}</td>
+              <td class="num tiny tnum">{{ c.latency_ms }} ms</td>
+              <td class="tiny">{{ c.stop_reason or "—" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="muted">no model calls recorded</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="edits" role="tabpanel">
+    <div class="card card-pad">
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>When</th><th>Run</th><th>Field</th><th>Kind</th><th class="num">Distance</th><th>Reason</th></tr></thead><tbody>
+          {% for e in edits %}
+            <tr>
+              <td class="mono tiny nowrap">{{ e.at | fmt_datetime }}</td>
+              <td class="mono tiny"><a href="/runs/{{ e.thread_id }}/audit">{{ e.thread_id }}</a></td>
+              <td class="mono tiny">{{ e.field }}</td>
+              <td class="tiny">{{ (e.edit_kind or "").replace("_", " ") }}</td>
+              <td class="num tiny tnum">{{ e.char_distance if e.char_distance is not none else "—" }}</td>
+              <td class="tiny">{{ e.reason or "—" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted">no edits recorded</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+      <p class="tiny subtle" style="margin-top:var(--s3)">Append-only across runs. A field that is rewritten in every quarter is a field the draft is reliably getting wrong — which is the thing a per-run trail cannot show you.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="drafts" role="tabpanel">
+    <div class="card card-pad">
+      <h2 class="section-h" style="margin-bottom:var(--s2)">Every version of every row</h2>
+      <p class="small muted" style="margin-bottom:var(--s4)">Newest first. A version is kept each time a draft moves, so a previous quarter's row is still readable after the folder it was drafted in has been cleared.</p>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>When</th><th>Run</th><th>Quarter</th><th>Why</th><th>Traffic light</th><th class="num">Progress</th><th>Key success</th></tr></thead><tbody>
+          {% for s in snapshots %}
+            <tr>
+              <td class="mono tiny nowrap">{{ s.at | fmt_datetime }}</td>
+              <td class="mono tiny"><a href="/runs/{{ s.thread_id }}/audit#tab-drafts">{{ s.thread_id }}</a></td>
+              <td class="mono tiny tnum">{{ s.quarter or "—" }}</td>
+              <td class="tiny">{{ s.reason or "—" }}</td>
+              <td>{{ tl_badge(s.traffic_light) }}</td>
+              <td class="num tiny tnum">{% if s.progress_percent is not none %}{{ s.progress_percent }}%{% else %}—{% endif %}</td>
+              <td class="tiny">{{ (s.row.get("Key_Success") or "—") | string | truncate(80) }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="muted">no draft versions recorded</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
